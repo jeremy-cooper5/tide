@@ -72,7 +72,7 @@ p{margin:0}
 .bar-end{display:flex;align-items:center;gap:4px}
 .today{color:var(--ink-2);font-size:14px;margin-right:10px;white-space:nowrap;font-variant-numeric:tabular-nums}
 
-.stage{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(290px,25vw,400px);gap:clamp(28px,5vw,96px);padding:0 var(--pad) clamp(16px,4vh,44px);align-items:center}
+.stage{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) min(var(--music-w,clamp(290px,25vw,400px)),62vw);gap:clamp(28px,5vw,96px);padding:0 var(--pad) clamp(16px,4vh,44px);align-items:center}
 .timer{container-type:size;height:100%;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:clamp(8px,1.8vh,20px)}
 .intent{width:min(100%,36ch);background:transparent;border:0;border-bottom:1px solid transparent;padding:4px 0;font-size:clamp(17px,2.3vh,24px);font-weight:500;color:var(--ink);border-radius:0}
 .intent::placeholder{color:var(--ink-2);opacity:1}
@@ -109,7 +109,7 @@ body[data-phase="short"] .clock,body[data-phase="long"] .clock{font-weight:250;-
 /* ---------- Music ---------- */
 .music{position:relative;min-width:0;align-self:center}
 .now{display:flex;flex-direction:column;gap:14px}
-.art-wrap{position:relative;display:block;width:min(100%,40vh);aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--line);box-shadow:0 30px 64px -30px rgb(0 0 0 / .62);flex:none}
+.art-wrap{position:relative;display:block;width:min(100%,62vh);aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--line);box-shadow:0 30px 64px -30px rgb(0 0 0 / .62);flex:none}
 body:not([data-phase="focus"]) .art-wrap{box-shadow:0 26px 50px -32px rgb(0 0 0 / .4)}
 .art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease}
 .art.loaded{opacity:1}
@@ -227,6 +227,14 @@ dialog.sheet::backdrop{background:rgb(0 0 0 / .38)}
 .choice small{display:block;color:var(--ink-2);font-size:14px;line-height:1.35}
 .select{border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 14px;max-width:250px;min-width:150px}
 .select option{background:var(--surface);color:var(--ink)}
+.swatches{display:flex;flex-wrap:wrap;gap:10px;padding:2px 0 6px}
+.swatch{position:relative;width:40px;height:40px;border-radius:50%;border:0;padding:0;cursor:pointer;box-shadow:inset 0 0 0 1px var(--line);display:grid;place-items:center;color:var(--ink);flex:none;transition:transform .12s}
+.swatch:hover{transform:scale(1.08)}
+.swatch[aria-pressed="true"]{outline:2px solid var(--ink);outline-offset:3px}
+.swatch .ic{width:18px;height:18px}
+.swatch-album{background:var(--line)}
+.swatch-custom{background:conic-gradient(from 90deg,#e5606b,#e8b04f,#8fc46a,#4fb5b0,#5b7fe0,#a46ad8,#e5606b)}
+.swatch-custom input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;border:0;padding:0}
 .keys{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;align-items:center;font-size:15px}
 kbd{font-family:var(--ui);font-size:13px;font-weight:600;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:2px 8px;min-width:30px;display:inline-block;text-align:center;justify-self:start}
 
@@ -258,7 +266,16 @@ kbd{font-family:var(--ui);font-size:13px;font-weight:600;border:1px solid var(--
 .blocker p{color:var(--ink-2);margin-bottom:22px}
 
 /* ---------- Smaller windows: timer on top, music docked below ---------- */
+.resizer{position:absolute;top:-40px;bottom:-40px;left:calc(-1 * clamp(28px,5vw,96px) / 2 - 10px);width:20px;cursor:col-resize;touch-action:none;display:flex;justify-content:center;border-radius:10px}
+.resizer::before{content:"";width:2px;height:100%;border-radius:2px;background:var(--line);opacity:0;transition:opacity .2s,background-color .2s}
+.music:hover .resizer::before{opacity:1}
+.resizer:hover::before,.resizer.dragging::before,.resizer:focus-visible::before{opacity:1;background:var(--ink-2)}
+.resizer:focus-visible{outline:none}
+body.resizing{cursor:col-resize;user-select:none}
+body:not(.tide-on) .tide{visibility:hidden}
+
 @media (max-width:1000px),(max-aspect-ratio:5/4){
+  .resizer{display:none}
   .stage{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;gap:14px;align-items:stretch}
   .music{align-self:end;padding-top:12px;border-top:1px solid var(--line)}
   .now{display:grid;grid-template-columns:60px minmax(0,1fr) auto;grid-template-areas:"art track transport" "seek seek extras";align-items:center;gap:6px 16px}
@@ -345,6 +362,7 @@ kbd{font-family:var(--ui);font-size:13px;font-weight:600;border:1px solid var(--
     </section>
 
     <section class="music" id="music" aria-label="Music">
+      <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="Resize the music panel" tabindex="0" title="Drag to resize. Double-click to reset."></div>
       <div class="music-empty" id="musicOff">
         <p class="empty-title">Music is off</p>
         <p class="empty-text">Connect Spotify to play music here. It pauses when a break starts and picks up again when you focus.</p>
@@ -430,7 +448,14 @@ kbd{font-family:var(--ui);font-size:13px;font-weight:600;border:1px solid var(--
       <label class="field"><span class="field-label">Start breaks automatically</span><input type="checkbox" class="switch" data-key="autoBreak"></label>
       <label class="field"><span class="field-label">Start focus automatically after a break<small>When this is off, Tide waits for you to press Start</small></span><input type="checkbox" class="switch" data-key="autoFocus"></label>
       <label class="field"><span class="field-label">Show seconds</span><input type="checkbox" class="switch" data-key="showSeconds"></label>
+      <label class="field"><span class="field-label">Fill the background as time passes<small>A band rises from the bottom of the window during each session</small></span><input type="checkbox" class="switch" data-key="showTide"></label>
       <label class="field"><span class="field-label">Keep the screen on while the timer runs</span><input type="checkbox" class="switch" data-key="wakeLock"></label>
+    </section>
+
+    <section class="group">
+      <h3>Colour</h3>
+      <p class="group-note">Follow the album art that’s playing, or pick a colour for the room</p>
+      <div class="swatches" id="swatches" role="group" aria-label="Room colour"></div>
     </section>
 
     <section class="group">
@@ -447,7 +472,6 @@ kbd{font-family:var(--ui);font-size:13px;font-weight:600;border:1px solid var(--
       <div class="field"><span class="field-label">Focus playlist<small>Starts with a focus session when nothing is loaded yet</small></span><select class="select" id="focusPlaylist" aria-label="Focus playlist"></select></div>
       <label class="field"><span class="field-label">Pause the music when I pause the timer</span><input type="checkbox" class="switch" data-key="pauseWithTimer"></label>
       <label class="field"><span class="field-label">Fade music in and out</span><input type="checkbox" class="switch" data-key="fade"></label>
-      <label class="field"><span class="field-label">Colour the room from the album art</span><input type="checkbox" class="switch" data-key="albumTint"></label>
     </section>
 
     <section class="group">
@@ -595,9 +619,9 @@ const toast = (m, o) => Toast.show(m, o);
 ================================================================= */
 const DEFAULTS = {
   focusMin: 25, shortMin: 5, longMin: 15, rounds: 4,
-  autoBreak: true, autoFocus: false, showSeconds: true, wakeLock: true,
+  autoBreak: true, autoFocus: false, showSeconds: true, showTide: true, wakeLock: true,
   breakMusic: 'pause', breakVolume: 30, breakPlaylist: null, focusPlaylist: null,
-  pauseWithTimer: true, fade: true, albumTint: true,
+  pauseWithTimer: true, fade: true, albumTint: true, roomColor: null,
   chime: true, chimeVolume: 60, notify: false,
   volume: 70
 };
@@ -625,7 +649,13 @@ function saveStats(force) { if (force || Date.now() - statsSavedAt > 15000) { st
    Colour: one hue (from the album art) drives every phase
 ================================================================= */
 const DEFAULT_TINT = { hue: 158, k: 1 };
+const PRESETS = [
+  { name: 'Green', hue: 158, k: 1 }, { name: 'Teal', hue: 200, k: 1 }, { name: 'Ocean', hue: 248, k: 1 },
+  { name: 'Violet', hue: 295, k: 1 }, { name: 'Rose', hue: 355, k: 1 }, { name: 'Ember', hue: 38, k: 1.1 },
+  { name: 'Gold', hue: 88, k: 1 }, { name: 'Graphite', hue: 250, k: .15 }
+];
 let tint = store.get('tide.tint', DEFAULT_TINT);
+function baseTint() { return S.albumTint ? tint : (S.roomColor && isFinite(S.roomColor.hue) ? S.roomColor : DEFAULT_TINT); }
 if (!tint || !isFinite(tint.hue) || !isFinite(tint.k)) tint = DEFAULT_TINT;
 
 function srgbToLinear(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
@@ -647,7 +677,7 @@ function oklchToHex(L, C, hue) {
 }
 
 function palette(phase) {
-  const base = S.albumTint ? tint : DEFAULT_TINT;
+  const base = baseTint();
   const hue = ((phase === 'long' ? base.hue + 48 : base.hue) % 360 + 360) % 360;
   const k = base.k;
   const c = (L, C, a) => `oklch(${L} ${(C * k).toFixed(4)} ${hue.toFixed(1)}${a != null ? ' / ' + a : ''})`;
@@ -902,7 +932,7 @@ const Favicon = {
     g.save();
     g.beginPath(); g.roundRect(0, 0, 64, 64, 15); g.clip();
     g.fillStyle = p.hexField; g.fillRect(0, 0, 64, 64);
-    g.fillStyle = T.phase === 'focus' ? oklchToHex(.42, .06 * (S.albumTint ? tint.k : 1), S.albumTint ? tint.hue : DEFAULT_TINT.hue) : p.hexTide;
+    g.fillStyle = T.phase === 'focus' ? oklchToHex(.42, .06 * baseTint().k, baseTint().hue) : p.hexTide;
     const hgt = Math.round(64 * prog); g.fillRect(0, 64 - hgt, 64, hgt);
     g.restore();
     if (T.status !== 'running') { g.fillStyle = p.hexInk; g.fillRect(21, 19, 8, 26); g.fillRect(35, 19, 8, 26); }
@@ -1809,8 +1839,42 @@ const SettingsUI = {
     $$('#settings input[name="breakMusic"]').forEach(el => { el.checked = el.value === S.breakMusic; });
     setRange($('#breakVolume'), S.breakVolume, 90); this.breakVolText();
     setRange($('#chimeVolume'), S.chimeVolume, 100);
-    this.syncBreakFields(); this.syncPresets(); this.renderAccount(); this.notifyNote();
+    this.syncBreakFields(); this.syncPresets(); this.renderAccount(); this.notifyNote(); this.renderSwatches();
     $('#installField').hidden = !deferredInstall;
+  },
+  renderSwatches() {
+    const box = $('#swatches'); box.textContent = '';
+    const cur = S.albumTint ? 'album' : S.roomColor ? (S.roomColor.custom ? 'custom' : S.roomColor.name) : 'Green';
+    const pick = choice => {
+      if (choice === 'album') { S.albumTint = true; }
+      else { S.albumTint = false; S.roomColor = choice; }
+      saveSettings(); Rooms.apply(T.phase); Favicon.draw(); this.renderSwatches();
+    };
+    const preview = c => `linear-gradient(135deg, ${oklchToHex(.3, .05 * c.k, c.hue)} 50%, ${oklchToHex(.86, .045 * c.k, c.hue)} 50%)`;
+    const album = h('button', { type: 'button', class: 'swatch swatch-album', title: 'Follow the album art', 'aria-label': 'Follow the album art', 'aria-pressed': String(cur === 'album'), onclick: () => pick('album') }, icon('note'));
+    box.append(album);
+    for (const c of PRESETS) {
+      const b = h('button', { type: 'button', class: 'swatch', title: c.name, 'aria-label': c.name, 'aria-pressed': String(cur === c.name), onclick: () => pick({ name: c.name, hue: c.hue, k: c.k }) });
+      b.style.background = preview(c);
+      box.append(b);
+    }
+    const custom = h('label', { class: 'swatch swatch-custom', title: 'Pick any colour', 'aria-pressed': String(cur === 'custom') });
+    if (cur === 'custom') custom.style.background = preview(S.roomColor);
+    const input = h('input', { type: 'color', 'aria-label': 'Pick any colour', value: S.roomColor && S.roomColor.hex || '#3f8f6b' });
+    const apply = () => {
+      const v = input.value, r = parseInt(v.slice(1, 3), 16), g = parseInt(v.slice(3, 5), 16), b = parseInt(v.slice(5, 7), 16);
+      const [, A, B] = rgbToOklab(r, g, b), C = Math.hypot(A, B);
+      const hue = (Math.atan2(B, A) * 180 / Math.PI + 360) % 360;
+      S.albumTint = false;
+      S.roomColor = { custom: true, hex: v, hue, k: C < 0.03 ? 0.15 : clamp(0.55 + C * 4, 0.55, 1.35) };
+      saveSettings(); Rooms.apply(T.phase); Favicon.draw();
+      custom.style.background = preview(S.roomColor);
+      $$('#swatches .swatch').forEach(x => x.setAttribute('aria-pressed', String(x === custom)));
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('change', () => this.renderSwatches());
+    custom.append(input);
+    box.append(custom);
   },
   breakVolText() { $('#breakVolumeText').textContent = `${S.breakVolume}% of your normal volume`; },
   syncBreakFields() { $('#breakPlaylistField').hidden = S.breakMusic !== 'switch'; $('#breakVolumeField').hidden = S.breakMusic !== 'duck'; },
@@ -1886,8 +1950,8 @@ const SettingsUI = {
         if (!ok) { el.checked = false; this.notifyNote(); toast('Tide isn’t allowed to show notifications. Allow them in your browser’s site settings.'); return; }
       }
       S[key] = el.checked; saveSettings();
-      if (key === 'albumTint') { Rooms.apply(T.phase); Favicon.draw(); }
       if (key === 'showSeconds') render(true);
+      if (key === 'showTide') applyTide();
       if (key === 'wakeLock') WakeLock.sync();
       this.notifyNote();
     }));
@@ -2037,7 +2101,7 @@ function bindUi() {
     if (e.key === 'Escape') { if (DeviceMenu.isOpen) DeviceMenu.close(); else if (Library.isOpen && !$('#settings').open) Library.close(); return; }
     const t = e.target;
     if ($('#settings').open || !$('#setup').hidden || !$('#blocker').hidden) return;
-    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.id === 'resizer')) return;
     if (e.key === ' ' && t && t.closest && t.closest('button, a')) return;
     switch (e.key) {
       case ' ': e.preventDefault(); Timer.toggle(); break;
@@ -2070,6 +2134,51 @@ function startSpotify() {
   Playback.refresh();
 }
 
+function applyTide() { document.body.classList.toggle('tide-on', !!S.showTide); }
+
+/* Drag the handle left of the music panel to change its width. */
+const Resizer = {
+  min: 260,
+  max() { return Math.max(this.min, Math.min(innerWidth * 0.62, 900)); },
+  set(px, save = true) {
+    const w = Math.round(clamp(px, this.min, this.max()));
+    document.documentElement.style.setProperty('--music-w', w + 'px');
+    $('#resizer').setAttribute('aria-valuenow', String(w));
+    if (save) store.set('tide.musicW', w);
+  },
+  reset() { document.documentElement.style.removeProperty('--music-w'); store.del('tide.musicW'); },
+  current() { return $('#music').getBoundingClientRect().width; },
+  init() {
+    const el = $('#resizer');
+    const saved = store.get('tide.musicW', null);
+    if (saved) this.set(saved, false);
+    el.setAttribute('aria-valuemin', String(this.min));
+    let drag = null;
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const r = $('#music').getBoundingClientRect();
+      drag = { right: r.right, offset: r.right - e.clientX - r.width };
+      el.classList.add('dragging'); document.body.classList.add('resizing');
+    });
+    el.addEventListener('pointermove', e => { if (drag) this.set(drag.right - e.clientX - drag.offset, false); });
+    const end = () => {
+      if (!drag) return;
+      drag = null; el.classList.remove('dragging'); document.body.classList.remove('resizing');
+      this.set(this.current());
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('dblclick', () => this.reset());
+    el.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        this.set(this.current() + (e.key === 'ArrowLeft' ? 24 : -24));
+      }
+    });
+  }
+};
+
 async function boot() {
   paintIcons();
   Clock.el = $('#clock');
@@ -2078,6 +2187,8 @@ async function boot() {
   document.body.dataset.phase = T.phase;
   document.body.dataset.status = T.status;
   Rooms.init(T.phase);
+  applyTide();
+  Resizer.init();
   render(true);
   bindUi();
   Instance.init();

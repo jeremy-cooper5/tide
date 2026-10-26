@@ -1,0 +1,8 @@
+# Windows scripts and the README need Windows line endings, however the repo is downloaded.
+* text=auto
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+README.txt text eol=crlf
+*.png binary
+*.woff2 binary
