@@ -1,0 +1,2100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tide</title>
+<meta name="description" content="A focus timer that plays your Spotify music and pauses it on breaks.">
+<meta name="theme-color" content="#0a1e13">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" id="favicon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<style>
+/* ------------------------------------------------------------------
+   Tide. The whole window is the timer: the tide rises as a session
+   passes. Focus is a dark room tinted by the album art, breaks are
+   light, and the clock is hollow whenever it isn't running.
+------------------------------------------------------------------- */
+@font-face{font-family:"Big Shoulders Display";src:url("/fonts/big-shoulders-display-latin-wght-normal.woff2") format("woff2");font-weight:100 900;font-display:block}
+@font-face{font-family:"Schibsted Grotesk";src:url("/fonts/schibsted-grotesk-latin-wght-normal.woff2") format("woff2");font-weight:400 900;font-display:swap;unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD}
+@font-face{font-family:"Schibsted Grotesk";src:url("/fonts/schibsted-grotesk-latin-ext-wght-normal.woff2") format("woff2");font-weight:400 900;font-display:swap;unicode-range:U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF}
+
+@property --ink{syntax:"<color>";inherits:true;initial-value:#eef4f0}
+@property --ink-2{syntax:"<color>";inherits:true;initial-value:#a7b6ad}
+@property --line{syntax:"<color>";inherits:true;initial-value:rgb(255 255 255 / .14)}
+@property --accent{syntax:"<color>";inherits:true;initial-value:#9fd8b9}
+@property --surface{syntax:"<color>";inherits:true;initial-value:#17302a}
+@property --on-ink{syntax:"<color>";inherits:true;initial-value:#0a1e13}
+@property --field{syntax:"<color>";inherits:true;initial-value:#0a1e13}
+@property --tide{syntax:"<color>";inherits:true;initial-value:#0f2b1c}
+@property --dwn{syntax:"<number>";inherits:true;initial-value:.44}
+@property --cwn{syntax:"<number>";inherits:true;initial-value:.24}
+
+:root{
+  --ui:"Schibsted Grotesk",system-ui,"Segoe UI",Roboto,sans-serif;
+  --num:"Big Shoulders Display","Bahnschrift","Arial Narrow",sans-serif;
+  --pad:clamp(16px,3vw,48px);
+  --ease:cubic-bezier(.65,0,.35,1);
+  --shift:1.2s;
+  transition:--ink var(--shift) ease,--ink-2 var(--shift) ease,--line var(--shift) ease,--accent var(--shift) ease,--surface var(--shift) ease,--on-ink var(--shift) ease;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;font-family:var(--ui);font-size:16px;line-height:1.45;color:var(--ink);background:#0a1e13;overflow:hidden;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+button,input,select{font:inherit;color:inherit;letter-spacing:inherit}
+button{cursor:pointer;-webkit-tap-highlight-color:transparent}
+a{color:inherit}
+p{margin:0}
+[hidden]{display:none!important}
+:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.ic{display:inline-flex;width:20px;height:20px;flex:none}
+.ic svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ic svg .f{fill:currentColor;stroke:none}
+
+/* ---------- The room: field + rising tide ---------- */
+.rooms{position:fixed;inset:0;z-index:0;overflow:hidden}
+.room{position:absolute;inset:0;background:var(--field);transition:--field 1.6s ease,--tide 1.6s ease}
+.tide{position:absolute;inset:0;background:var(--tide);transform:translateY(100%);transition:transform .4s linear;will-change:transform}
+.tide::before{content:"";position:absolute;left:0;right:0;top:0;height:1px;background:var(--line)}
+.room.still,.room.still .tide{transition:none}
+.room.rise{animation:rise 1.5s var(--ease) both}
+@keyframes rise{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}
+
+/* ---------- Layout ---------- */
+.app{position:relative;z-index:1;height:100%;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.setup-open .app{visibility:hidden}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:clamp(12px,2.4vh,28px) var(--pad) 0}
+.phases{display:flex;gap:2px;min-width:0}
+.phase-tab,.chip-btn{border:0;background:transparent;color:var(--ink-2);font-weight:500;font-size:15px;padding:9px 15px;border-radius:999px;white-space:nowrap;transition:color .2s,background-color .2s}
+.phase-tab:hover,.chip-btn:hover{color:var(--ink);background:color-mix(in oklab,var(--line) 50%,transparent)}
+.phase-tab[aria-selected="true"]{color:var(--ink);background:var(--line)}
+.chip-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 13px}
+.bar-end{display:flex;align-items:center;gap:4px}
+.today{color:var(--ink-2);font-size:14px;margin-right:10px;white-space:nowrap;font-variant-numeric:tabular-nums}
+
+.stage{min-height:0;display:grid;grid-template-columns:minmax(0,1fr) clamp(290px,25vw,400px);gap:clamp(28px,5vw,96px);padding:0 var(--pad) clamp(16px,4vh,44px);align-items:center}
+.timer{container-type:size;height:100%;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:clamp(8px,1.8vh,20px)}
+.intent{width:min(100%,36ch);background:transparent;border:0;border-bottom:1px solid transparent;padding:4px 0;font-size:clamp(17px,2.3vh,24px);font-weight:500;color:var(--ink);border-radius:0}
+.intent::placeholder{color:var(--ink-2);opacity:1}
+.intent:hover,.intent:focus{border-bottom-color:var(--line);outline:none}
+
+/* The clock: solid while running, hollow otherwise; heavy for focus, thin for breaks. */
+.clock{--dwn:.44;--cwn:.24;font-family:var(--num);font-size:min(calc(100cqw / max(var(--clock-w,2), 2.04)),calc((100cqh - 230px) * 1.1));line-height:.8;font-weight:640;display:flex;align-items:flex-end;white-space:nowrap;margin:.05em 0 .02em -.025em;color:var(--ink);-webkit-text-stroke:max(2px,.0055em) var(--ink);transition:font-weight var(--shift) var(--ease),color .45s ease,--dwn var(--shift) var(--ease),--cwn var(--shift) var(--ease);user-select:none}
+.clock .ch{display:inline-block;width:calc(var(--dwn) * 1em);text-align:center}
+.clock .colon{width:calc(var(--cwn) * 1em)}
+.clock .suffix{font-family:var(--ui);font-size:.09em;font-weight:500;line-height:1;margin:0 0 .02em .3em;-webkit-text-stroke:0;color:var(--ink-2)}
+body:not([data-status="running"]) .clock{color:transparent}
+body[data-phase="short"] .clock,body[data-phase="long"] .clock{font-weight:250;--dwn:.35;--cwn:.2}
+
+.meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 16px;font-size:clamp(15px,1.9vh,19px)}
+.phase-name{font-weight:650}
+.round-text{color:var(--ink-2)}
+.dots{display:inline-flex;gap:7px}
+.dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--ink-2);display:block}
+.dots i.done{background:var(--ink);border-color:var(--ink)}
+.dots i.now{border-color:var(--ink)}
+
+.controls{display:flex;align-items:center;flex-wrap:wrap;gap:6px 2px;margin-top:clamp(2px,1vh,12px)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;border:0;border-radius:999px;font-weight:600;font-size:16px;line-height:1;padding:15px 26px;white-space:nowrap;text-decoration:none;transition:background-color .2s,color .2s,box-shadow .2s,transform .12s}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--ink);color:var(--on-ink);min-width:9.2em;margin-right:10px}
+.btn-primary:hover{background:color-mix(in oklab,var(--ink) 86%,var(--on-ink))}
+.btn-quiet{background:transparent;color:var(--ink-2);padding:13px 14px;font-weight:500}
+.btn-quiet:hover{color:var(--ink);background:var(--line)}
+.btn-quiet:disabled{opacity:.38;cursor:default;background:transparent;color:var(--ink-2);transform:none}
+.btn-line{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
+.btn-line:hover{box-shadow:inset 0 0 0 1.5px var(--ink-2)}
+.btn-sm{padding:10px 16px;font-size:15px;min-width:0}
+
+/* ---------- Music ---------- */
+.music{position:relative;min-width:0;align-self:center}
+.now{display:flex;flex-direction:column;gap:14px}
+.art-wrap{position:relative;display:block;width:min(100%,40vh);aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--line);box-shadow:0 30px 64px -30px rgb(0 0 0 / .62);flex:none}
+body:not([data-phase="focus"]) .art-wrap{box-shadow:0 26px 50px -32px rgb(0 0 0 / .4)}
+.art{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .5s ease}
+.art.loaded{opacity:1}
+.art-ph{position:absolute;inset:0;display:grid;place-items:center;color:var(--ink-2)}
+.art-ph .ic{width:34%;height:34%}
+.track{min-width:0;margin-top:4px}
+.track-title{display:block;font-size:21px;font-weight:650;line-height:1.25;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+a.track-title:hover{text-decoration:underline;text-underline-offset:3px}
+.track-artists{color:var(--ink-2);font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track-artists a{text-decoration:none}
+.track-artists a:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.seek{display:grid;gap:2px}
+.times{display:flex;justify-content:space-between;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.transport{display:flex;align-items:center;justify-content:space-between;width:100%;max-width:330px}
+.extras{display:flex;align-items:center;gap:4px;width:100%;max-width:330px}
+.icon-btn{position:relative;display:inline-grid;place-items:center;width:40px;height:40px;flex:none;border-radius:50%;border:0;background:transparent;color:var(--ink-2);transition:color .15s,background-color .15s}
+.icon-btn:hover{color:var(--ink);background:var(--line)}
+.icon-btn:disabled{opacity:.35;cursor:default;background:transparent}
+.icon-btn[aria-pressed="true"]{color:var(--accent)}
+.icon-btn.dot[aria-pressed="true"]::after{content:"";position:absolute;bottom:3px;left:50%;width:4px;height:4px;margin-left:-2px;border-radius:50%;background:currentColor}
+.play-btn{display:grid;place-items:center;width:56px;height:56px;border-radius:50%;border:0;background:var(--ink);color:var(--on-ink);flex:none;transition:transform .12s,background-color .2s}
+.play-btn:hover{background:color-mix(in oklab,var(--ink) 86%,var(--on-ink))}
+.play-btn:active{transform:scale(.95)}
+.play-btn .ic{width:24px;height:24px}
+.volume{display:flex;align-items:center;gap:2px;flex:1;min-width:80px}
+.device-btn{display:inline-flex;align-items:center;gap:7px;max-width:150px;border:0;background:transparent;color:var(--ink-2);padding:8px 10px;border-radius:999px;font-size:14px;font-weight:500}
+.device-btn span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.device-btn:hover{color:var(--ink);background:var(--line)}
+.device-btn.remote{color:var(--accent)}
+.music-empty{display:flex;flex-direction:column;align-items:flex-start;gap:12px;max-width:34ch}
+.empty-title{font-weight:650;font-size:21px;line-height:1.2}
+.empty-text{color:var(--ink-2)}
+
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;margin:0;cursor:pointer;--val:0%}
+input[type=range]:focus-visible{outline-offset:2px;border-radius:4px}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:4px;background:linear-gradient(to right,var(--ink) var(--val),var(--line) var(--val))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--ink);margin-top:-5px;border:0;opacity:0;transition:opacity .15s}
+input[type=range]:hover::-webkit-slider-thumb,input[type=range]:focus-visible::-webkit-slider-thumb,input[type=range]:active::-webkit-slider-thumb{opacity:1}
+input[type=range]::-moz-range-track{height:4px;border-radius:4px;background:var(--line)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:4px;background:var(--ink)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--ink)}
+
+/* Device menu */
+.menu{position:fixed;z-index:35;width:270px;max-height:60vh;overflow:auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:14px;padding:6px;box-shadow:0 22px 56px -22px rgb(0 0 0 / .55)}
+.menu button{display:flex;width:100%;align-items:center;gap:10px;padding:10px 12px;border:0;background:transparent;border-radius:9px;text-align:left}
+.menu button:hover{background:var(--line)}
+.menu .on{color:var(--accent)}
+.menu small{display:block;color:var(--ink-2);font-size:13px}
+.menu-note{padding:10px 12px;color:var(--ink-2);font-size:14px}
+
+/* ---------- Library drawer ---------- */
+.drawer{position:fixed;top:0;right:0;bottom:0;z-index:30;width:min(440px,100vw);background:var(--surface);color:var(--ink);border-left:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(102%);visibility:hidden;transition:transform .3s var(--ease),visibility 0s linear .3s;box-shadow:-30px 0 70px -40px rgb(0 0 0 / .5)}
+.drawer.open{transform:none;visibility:visible;transition:transform .3s var(--ease)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:16px 12px 10px 16px}
+.tabs{display:flex;gap:2px;min-width:0;overflow-x:auto}
+.tab{border:0;background:transparent;color:var(--ink-2);padding:8px 12px;border-radius:999px;font-weight:500;font-size:15px;white-space:nowrap}
+.tab:hover{color:var(--ink);background:color-mix(in oklab,var(--line) 50%,transparent)}
+.tab[aria-selected="true"]{color:var(--ink);background:var(--line)}
+.search-box{padding:0 16px 8px}
+.search-box input{width:100%;border:1px solid var(--line);background:transparent;border-radius:999px;padding:11px 16px;font-size:15px}
+.search-box input:focus{outline:none;border-color:var(--ink-2)}
+.drawer-body{flex:1;overflow:auto;padding:4px 8px 28px;overscroll-behavior:contain}
+.section-title{font-size:14px;color:var(--ink-2);font-weight:600;margin:18px 12px 6px}
+.list-actions{display:flex;gap:8px;padding:8px 10px 6px}
+.row{display:flex;align-items:center;border-radius:10px}
+.row:hover{background:var(--line)}
+.row-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:8px 10px;border:0;background:transparent;text-align:left;border-radius:10px}
+div.row-main{cursor:default}
+.row-art{width:44px;height:44px;border-radius:5px;object-fit:cover;flex:none;background:var(--line);display:grid;place-items:center;color:var(--ink-2)}
+.row-art.round{border-radius:50%}
+.row-text{min-width:0;display:flex;flex-direction:column}
+.row-title{font-weight:550;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-sub{font-size:14px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row.playing .row-title{color:var(--accent)}
+.row-add{opacity:0;margin-right:4px}
+.row:hover .row-add,.row-add:focus-visible{opacity:1}
+.drawer-note{padding:22px 12px;color:var(--ink-2)}
+.more{display:block;margin:12px auto 0}
+
+/* ---------- Settings ---------- */
+dialog.sheet{border:1px solid var(--line);border-radius:18px;padding:0;background:var(--surface);color:var(--ink);width:min(700px,calc(100vw - 32px));max-height:min(880px,calc(100vh - 40px));box-shadow:0 40px 110px -40px rgb(0 0 0 / .65)}
+dialog.sheet::backdrop{background:rgb(0 0 0 / .38)}
+.sheet-head{position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:22px 24px 14px;background:var(--surface)}
+.sheet-head h2{margin:0;font-family:var(--num);font-weight:600;font-size:38px;line-height:.9}
+.sheet-body{padding:0 24px 26px}
+.group{padding:20px 0 14px;border-top:1px solid var(--line)}
+.group h3{margin:0 0 10px;font-size:17px;font-weight:650}
+.group-note{color:var(--ink-2);font-size:15px;margin:4px 0 10px}
+.field{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:9px 0}
+.field-label{display:flex;flex-direction:column;min-width:0}
+.field-label small{color:var(--ink-2);font-size:14px;line-height:1.35}
+.field > input[type=range]{max-width:220px}
+.inline{display:inline-flex;align-items:center;gap:10px}
+.num{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:999px;flex:none}
+.num button{width:38px;height:38px;border:0;background:transparent;border-radius:50%;font-size:18px;line-height:1;color:var(--ink-2)}
+.num button:hover{color:var(--ink);background:var(--line)}
+.num input{width:3.4ch;text-align:center;border:0;background:transparent;font-weight:600;font-variant-numeric:tabular-nums;-moz-appearance:textfield;appearance:textfield;padding:0}
+.num input:focus{outline:none}
+.num input::-webkit-inner-spin-button,.num input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.presets{display:flex;gap:6px;flex-wrap:wrap;margin:2px 0 8px}
+.preset{border:1px solid var(--line);background:transparent;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:500;font-variant-numeric:tabular-nums}
+.preset:hover{border-color:var(--ink-2)}
+.preset[aria-pressed="true"]{background:var(--ink);color:var(--on-ink);border-color:var(--ink)}
+.switch{appearance:none;-webkit-appearance:none;width:44px;height:26px;margin:0;border-radius:999px;background:var(--line);position:relative;flex:none;cursor:pointer;transition:background-color .2s}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--ink-2);transition:transform .2s var(--ease),background-color .2s}
+.switch:checked{background:var(--accent)}
+.switch:checked::after{transform:translateX(18px);background:var(--on-ink)}
+.switch:focus-visible{outline-offset:2px;border-radius:999px}
+.choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:8px}
+.choice{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:12px;cursor:pointer;transition:border-color .2s,background-color .2s}
+.choice:hover{border-color:var(--ink-2)}
+.choice:has(input:checked){border-color:var(--ink);background:var(--line)}
+.choice input{accent-color:var(--ink);margin:3px 0 0;flex:none}
+.choice b{display:block;font-weight:600}
+.choice small{display:block;color:var(--ink-2);font-size:14px;line-height:1.35}
+.select{border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 14px;max-width:250px;min-width:150px}
+.select option{background:var(--surface);color:var(--ink)}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:9px 16px;align-items:center;font-size:15px}
+kbd{font-family:var(--ui);font-size:13px;font-weight:600;border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:2px 8px;min-width:30px;display:inline-block;text-align:center;justify-self:start}
+
+/* ---------- First-run setup ---------- */
+.setup{position:fixed;inset:0;z-index:40;overflow:auto;display:flex;justify-content:center;padding:clamp(28px,8vh,96px) var(--pad) 48px}
+.setup-inner{width:min(680px,100%)}
+.setup h1{font-family:var(--num);font-weight:640;font-size:clamp(60px,10vh,104px);line-height:.88;margin:0 0 20px}
+.lede{font-size:18px;color:var(--ink-2);max-width:58ch;margin-bottom:32px}
+.steps{list-style:none;margin:0 0 28px;padding:0;display:grid;gap:26px;counter-reset:step}
+.steps li{display:grid;grid-template-columns:42px minmax(0,1fr);gap:14px;counter-increment:step}
+.steps li::before{content:counter(step);font-family:var(--num);font-size:36px;font-weight:600;line-height:.9;color:var(--ink-2)}
+.steps p + *,.steps * + p{margin-top:10px}
+.copy-field{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.copy-field code{font-family:var(--ui);font-size:15px;font-weight:600;padding:10px 14px;border-radius:10px;background:var(--line);user-select:all;word-break:break-all}
+.connect-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.text-input{border:1px solid var(--line);background:transparent;border-radius:999px;padding:14px 18px;width:min(100%,360px);font-size:16px}
+.text-input:focus{outline:none;border-color:var(--ink-2)}
+.form-error{color:var(--ink);background:var(--line);border-radius:10px;padding:10px 14px;font-size:15px;max-width:52ch}
+.setup-foot{color:var(--ink-2);font-size:15px;max-width:60ch;margin-bottom:14px}
+#skipSetup{margin-left:-14px}
+
+/* ---------- Toasts & blocker ---------- */
+.toasts{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:60;display:grid;gap:8px;justify-items:center;pointer-events:none;width:max-content;max-width:calc(100vw - 32px)}
+.toast{pointer-events:auto;background:var(--ink);color:var(--on-ink);border-radius:18px;padding:11px 18px;font-size:15px;font-weight:500;line-height:1.35;box-shadow:0 18px 44px -18px rgb(0 0 0 / .55);display:flex;gap:14px;align-items:center;max-width:560px;animation:toast-in .25s var(--ease)}
+.toast button{border:0;background:transparent;color:inherit;font-weight:650;text-decoration:underline;text-underline-offset:3px;padding:0;white-space:nowrap}
+@keyframes toast-in{from{opacity:0;transform:translateY(10px)}}
+.blocker{position:fixed;inset:0;z-index:70;display:grid;place-items:center;padding:24px;background:var(--surface);text-align:center}
+.blocker h2{font-family:var(--num);font-weight:600;font-size:52px;line-height:.95;margin:0 0 12px}
+.blocker p{color:var(--ink-2);margin-bottom:22px}
+
+/* ---------- Smaller windows: timer on top, music docked below ---------- */
+@media (max-width:1000px),(max-aspect-ratio:5/4){
+  .stage{grid-template-columns:minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;gap:14px;align-items:stretch}
+  .music{align-self:end;padding-top:12px;border-top:1px solid var(--line)}
+  .now{display:grid;grid-template-columns:60px minmax(0,1fr) auto;grid-template-areas:"art track transport" "seek seek extras";align-items:center;gap:6px 16px}
+  .art-wrap{grid-area:art;width:60px;border-radius:6px;box-shadow:none}
+  body:not([data-phase="focus"]) .art-wrap{box-shadow:none}
+  .track{grid-area:track;margin:0}
+  .track-title{font-size:17px}
+  .track-artists{font-size:15px}
+  .transport{grid-area:transport;width:auto;gap:2px}
+  .transport .dot{display:none}
+  .play-btn{width:46px;height:46px}
+  .seek{grid-area:seek}
+  .extras{grid-area:extras;width:auto}
+  .volume{display:none}
+  .music-empty{flex-direction:row;flex-wrap:wrap;align-items:center;max-width:none;gap:6px 14px}
+  .music-empty .empty-text{flex:1 1 280px}
+}
+/* Tall portrait monitors: room for the album art beside the controls */
+@media (max-aspect-ratio:5/4) and (min-height:1100px) and (min-width:640px){
+  .music{padding-top:32px}
+  .now{grid-template-columns:min(26vh,340px) minmax(0,1fr);grid-template-rows:1fr auto auto auto auto 1fr;grid-template-areas:"art ." "art track" "art seek" "art transport" "art extras" "art .";column-gap:clamp(24px,4vw,48px);row-gap:12px}
+  .art-wrap{width:100%;border-radius:10px;box-shadow:0 30px 64px -30px rgb(0 0 0 / .62)}
+  body:not([data-phase="focus"]) .art-wrap{box-shadow:0 26px 50px -32px rgb(0 0 0 / .4)}
+  .track-title{font-size:21px}
+  .track-artists{font-size:16px}
+  .transport{justify-content:flex-start;gap:clamp(6px,1.6vw,18px)}
+  .transport .dot{display:inline-grid}
+  .play-btn{width:56px;height:56px}
+  .extras{max-width:420px}
+  .volume{display:flex}
+}
+@media (max-width:720px){
+  .today,.chip-btn .lbl{display:none}
+  .phase-tab{padding:8px 11px;font-size:14px}
+  .controls .btn-quiet span:not(.ic){display:none}
+  .choices{grid-template-columns:1fr}
+  .device-btn span:last-child{display:none}
+}
+@media (max-height:560px){.intent{display:none}}
+@media (prefers-reduced-motion:reduce){
+  :root{--shift:.01s}
+  .room.rise{animation:none}
+  .tide,.drawer,.drawer.open{transition:none}
+  .toast{animation:none}
+}
+</style>
+</head>
+<body data-phase="focus" data-status="idle">
+
+<div class="rooms" aria-hidden="true">
+  <div class="room" id="roomA"><div class="tide"></div></div>
+  <div class="room" id="roomB"><div class="tide"></div></div>
+</div>
+
+<div class="app" id="app">
+  <header class="bar">
+    <div class="phases" role="tablist" aria-label="Timer mode">
+      <button class="phase-tab" role="tab" data-phase="focus" aria-selected="true">Focus</button>
+      <button class="phase-tab" role="tab" data-phase="short" aria-selected="false">Short break</button>
+      <button class="phase-tab" role="tab" data-phase="long" aria-selected="false">Long break</button>
+    </div>
+    <div class="bar-end">
+      <span class="today" id="today"></span>
+      <button class="chip-btn" id="libraryBtn" title="Playlists, search and queue (L)"><span class="ic" data-icon="library"></span><span class="lbl">Music</span></button>
+      <button class="chip-btn" id="settingsBtn" title="Settings (,)"><span class="ic" data-icon="sliders"></span><span class="lbl">Settings</span></button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <section class="timer" aria-label="Timer">
+      <input class="intent" id="intent" maxlength="80" placeholder="What are you working on?" aria-label="What are you working on?" autocomplete="off" spellcheck="false">
+      <div class="clock" id="clock" role="timer"></div>
+      <div class="meta">
+        <span class="phase-name" id="phaseName">Focus</span>
+        <span class="round-text" id="roundText"></span>
+        <span class="dots" id="dots" aria-hidden="true"></span>
+      </div>
+      <div class="controls">
+        <button class="btn btn-primary" id="startBtn"><span class="ic" data-icon="play"></span><span id="startLabel">Start</span></button>
+        <button class="btn btn-quiet" id="resetBtn" title="Reset (R)"><span class="ic" data-icon="reset"></span><span id="resetLabel">Reset</span></button>
+        <button class="btn btn-quiet" id="skipBtn" title="Skip to the next session (S)"><span class="ic" data-icon="skip"></span><span>Skip</span></button>
+        <button class="btn btn-quiet" id="plusBtn" title="Add a minute to this session"><span class="ic" data-icon="plus"></span><span>1 min</span></button>
+      </div>
+    </section>
+
+    <section class="music" id="music" aria-label="Music">
+      <div class="music-empty" id="musicOff">
+        <p class="empty-title">Music is off</p>
+        <p class="empty-text">Connect Spotify to play music here. It pauses when a break starts and picks up again when you focus.</p>
+        <button class="btn btn-line btn-sm" id="connectBtn">Connect Spotify</button>
+      </div>
+      <div class="music-empty" id="musicIdle" hidden>
+        <p class="empty-title">Nothing playing</p>
+        <p class="empty-text" id="idleText">Starting the player…</p>
+        <button class="btn btn-line btn-sm" id="chooseBtn">Choose music</button>
+      </div>
+      <div class="now" id="musicNow" hidden>
+        <a class="art-wrap" id="artLink" target="_blank" rel="noopener" title="Open in Spotify">
+          <span class="art-ph"><span class="ic" data-icon="note"></span></span>
+          <img class="art" id="art" alt="" referrerpolicy="no-referrer">
+        </a>
+        <div class="track">
+          <a class="track-title" id="trackTitle" target="_blank" rel="noopener"></a>
+          <div class="track-artists" id="trackArtists"></div>
+        </div>
+        <div class="seek">
+          <input type="range" id="seek" min="0" max="1000" value="0" step="1" aria-label="Song position">
+          <div class="times"><span id="tPos">0:00</span><span id="tDur">0:00</span></div>
+        </div>
+        <div class="transport">
+          <button class="icon-btn dot" id="shuffleBtn" aria-pressed="false" title="Shuffle"><span class="ic" data-icon="shuffle"></span></button>
+          <button class="icon-btn" id="prevBtn" title="Previous (←)"><span class="ic" data-icon="prev"></span></button>
+          <button class="play-btn" id="playBtn" title="Play or pause the music (M)"><span class="ic" data-icon="play"></span></button>
+          <button class="icon-btn" id="nextBtn" title="Next (→)"><span class="ic" data-icon="next"></span></button>
+          <button class="icon-btn dot" id="repeatBtn" aria-pressed="false" title="Repeat"><span class="ic" data-icon="repeat"></span></button>
+        </div>
+        <div class="extras">
+          <button class="icon-btn" id="likeBtn" aria-pressed="false" title="Save to Liked Songs"><span class="ic" data-icon="heart"></span></button>
+          <div class="volume" id="volumeWrap">
+            <button class="icon-btn" id="muteBtn" title="Mute"><span class="ic" data-icon="volume"></span></button>
+            <input type="range" id="volume" min="0" max="100" step="1" aria-label="Volume">
+          </div>
+          <button class="device-btn" id="deviceBtn" aria-haspopup="menu" aria-expanded="false" title="Choose where the music plays"><span class="ic" data-icon="device"></span><span id="deviceName">This window</span></button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="menu" id="deviceMenu" role="menu" aria-label="Play on" hidden></div>
+
+<aside class="drawer" id="drawer" aria-label="Music library" aria-hidden="true">
+  <div class="drawer-head">
+    <div class="tabs" role="tablist" aria-label="Library">
+      <button class="tab" role="tab" data-tab="playlists" aria-selected="true">Playlists</button>
+      <button class="tab" role="tab" data-tab="liked" aria-selected="false">Liked</button>
+      <button class="tab" role="tab" data-tab="search" aria-selected="false">Search</button>
+      <button class="tab" role="tab" data-tab="queue" aria-selected="false">Queue</button>
+    </div>
+    <button class="icon-btn" id="drawerClose" title="Close (Esc)" aria-label="Close library"><span class="ic" data-icon="close"></span></button>
+  </div>
+  <div class="search-box" id="searchBox" hidden>
+    <input type="search" id="searchInput" placeholder="Songs, artists, albums or playlists" autocomplete="off" spellcheck="false" aria-label="Search Spotify">
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</aside>
+
+<dialog class="sheet" id="settings" aria-labelledby="settingsTitle">
+  <div class="sheet-head">
+    <h2 id="settingsTitle">Settings</h2>
+    <button class="btn btn-line btn-sm" id="settingsDone">Done</button>
+  </div>
+  <div class="sheet-body">
+    <section class="group" style="border-top:0;padding-top:4px">
+      <h3>Timer</h3>
+      <div class="presets" id="presets">
+        <button class="preset" type="button" data-preset="25,5,15,4" aria-pressed="false">25 / 5</button>
+        <button class="preset" type="button" data-preset="50,10,20,3" aria-pressed="false">50 / 10</button>
+        <button class="preset" type="button" data-preset="90,20,30,2" aria-pressed="false">90 / 20</button>
+      </div>
+      <div class="field"><span class="field-label">Focus<small>Minutes</small></span>
+        <span class="num" data-key="focusMin" data-min="1" data-max="180"><button type="button" data-step="-1" aria-label="Shorter focus">−</button><input type="number" inputmode="numeric" aria-label="Focus minutes"><button type="button" data-step="1" aria-label="Longer focus">+</button></span></div>
+      <div class="field"><span class="field-label">Short break<small>Minutes</small></span>
+        <span class="num" data-key="shortMin" data-min="1" data-max="60"><button type="button" data-step="-1" aria-label="Shorter break">−</button><input type="number" inputmode="numeric" aria-label="Short break minutes"><button type="button" data-step="1" aria-label="Longer break">+</button></span></div>
+      <div class="field"><span class="field-label">Long break<small>Minutes</small></span>
+        <span class="num" data-key="longMin" data-min="1" data-max="90"><button type="button" data-step="-1" aria-label="Shorter long break">−</button><input type="number" inputmode="numeric" aria-label="Long break minutes"><button type="button" data-step="1" aria-label="Longer long break">+</button></span></div>
+      <div class="field"><span class="field-label">Long break after<small>Focus rounds</small></span>
+        <span class="num" data-key="rounds" data-min="1" data-max="12"><button type="button" data-step="-1" aria-label="Fewer rounds">−</button><input type="number" inputmode="numeric" aria-label="Rounds before a long break"><button type="button" data-step="1" aria-label="More rounds">+</button></span></div>
+      <label class="field"><span class="field-label">Start breaks automatically</span><input type="checkbox" class="switch" data-key="autoBreak"></label>
+      <label class="field"><span class="field-label">Start focus automatically after a break<small>When this is off, Tide waits for you to press Start</small></span><input type="checkbox" class="switch" data-key="autoFocus"></label>
+      <label class="field"><span class="field-label">Show seconds</span><input type="checkbox" class="switch" data-key="showSeconds"></label>
+      <label class="field"><span class="field-label">Keep the screen on while the timer runs</span><input type="checkbox" class="switch" data-key="wakeLock"></label>
+    </section>
+
+    <section class="group">
+      <h3>Music</h3>
+      <p class="group-note">When a break starts</p>
+      <div class="choices" role="radiogroup" aria-label="When a break starts">
+        <label class="choice"><input type="radio" name="breakMusic" value="pause"><span><b>Pause the music</b><small>It picks up where it left off when focus starts</small></span></label>
+        <label class="choice"><input type="radio" name="breakMusic" value="switch"><span><b>Play a break playlist</b><small>Your focus music comes back afterwards</small></span></label>
+        <label class="choice"><input type="radio" name="breakMusic" value="duck"><span><b>Turn it down</b><small>The volume drops during breaks</small></span></label>
+        <label class="choice"><input type="radio" name="breakMusic" value="keep"><span><b>Keep playing</b><small>The music ignores the timer</small></span></label>
+      </div>
+      <div class="field" id="breakPlaylistField"><span class="field-label">Break playlist</span><select class="select" id="breakPlaylist" aria-label="Break playlist"></select></div>
+      <div class="field" id="breakVolumeField"><span class="field-label">Break volume<small id="breakVolumeText"></small></span><input type="range" id="breakVolume" min="5" max="90" step="5" aria-label="Break volume"></div>
+      <div class="field"><span class="field-label">Focus playlist<small>Starts with a focus session when nothing is loaded yet</small></span><select class="select" id="focusPlaylist" aria-label="Focus playlist"></select></div>
+      <label class="field"><span class="field-label">Pause the music when I pause the timer</span><input type="checkbox" class="switch" data-key="pauseWithTimer"></label>
+      <label class="field"><span class="field-label">Fade music in and out</span><input type="checkbox" class="switch" data-key="fade"></label>
+      <label class="field"><span class="field-label">Colour the room from the album art</span><input type="checkbox" class="switch" data-key="albumTint"></label>
+    </section>
+
+    <section class="group">
+      <h3>Alerts</h3>
+      <div class="field"><span class="field-label">Chime when a session ends</span><span class="inline"><button class="btn btn-quiet btn-sm" type="button" id="testChime">Play it</button><input type="checkbox" class="switch" data-key="chime" aria-label="Chime when a session ends"></span></div>
+      <div class="field"><span class="field-label">Chime volume</span><input type="range" id="chimeVolume" min="0" max="100" step="5" aria-label="Chime volume"></div>
+      <label class="field"><span class="field-label">Desktop notifications<small id="notifyNote">Shows a notification when a session ends</small></span><input type="checkbox" class="switch" data-key="notify"></label>
+    </section>
+
+    <section class="group">
+      <h3>Spotify</h3>
+      <div class="field"><span class="field-label"><span id="accountText">Not connected</span><small id="accountNote"></small></span><button class="btn btn-line btn-sm" type="button" id="accountBtn">Connect</button></div>
+      <div class="field" id="installField" hidden><span class="field-label">Open Tide in its own window<small>Installs it as an app you can pin and park on your second screen</small></span><button class="btn btn-line btn-sm" type="button" id="installBtn">Install</button></div>
+    </section>
+
+    <section class="group">
+      <h3>Keyboard</h3>
+      <div class="keys">
+        <kbd>Space</kbd><span>Start or pause the timer</span>
+        <kbd>S</kbd><span>Skip to the next session</span>
+        <kbd>R</kbd><span>Reset the timer</span>
+        <kbd>M</kbd><span>Play or pause the music</span>
+        <kbd>←</kbd><span>Previous song</span>
+        <kbd>→</kbd><span>Next song</span>
+        <kbd>L</kbd><span>Open the music library</span>
+        <kbd>,</kbd><span>Open settings</span>
+      </div>
+    </section>
+  </div>
+</dialog>
+
+<section class="setup" id="setup" hidden aria-labelledby="setupTitle">
+  <div class="setup-inner">
+    <h1 id="setupTitle">Connect Spotify</h1>
+    <p class="lede">Tide plays your music in this window, pauses it when a break starts and picks it back up when you focus. Spotify asks you to register a small developer app first. It takes about two minutes and needs Spotify Premium.</p>
+    <ol class="steps">
+      <li><div>
+        <p>Open the Spotify developer dashboard and log in with your Spotify account.</p>
+        <a class="btn btn-line btn-sm" href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Open the dashboard <span class="ic" data-icon="external"></span></a>
+      </div></li>
+      <li><div>
+        <p>Choose <b>Create app</b>. The name and description can be anything. Add this as the redirect URI:</p>
+        <div class="copy-field"><code id="redirectUri"></code><button class="btn btn-line btn-sm" type="button" data-copy="#redirectUri">Copy</button></div>
+        <p>Under <b>Which API/SDKs are you planning to use?</b> tick <b>Web API</b> and <b>Web Playback SDK</b>, agree to the terms and save.</p>
+      </div></li>
+      <li><div>
+        <p>Open your app’s <b>Settings</b>, copy the <b>Client ID</b> under Basic Information and paste it here.</p>
+        <form class="connect-form" id="connectForm" novalidate>
+          <input class="text-input" id="clientIdInput" placeholder="Client ID" autocomplete="off" spellcheck="false" aria-label="Client ID">
+          <button class="btn btn-primary" type="submit">Connect Spotify</button>
+        </form>
+        <p class="form-error" id="clientIdError" role="alert" hidden></p>
+      </div></li>
+    </ol>
+    <p class="setup-foot">If Spotify later says your account isn’t registered for the app, open the app’s settings in the dashboard, go to <b>User Management</b> and add the email address of your Spotify account.</p>
+    <button class="btn btn-quiet" type="button" id="skipSetup">Use the timer without music</button>
+  </div>
+</section>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<div class="blocker" id="blocker" hidden>
+  <div>
+    <h2>Tide is open in another window</h2>
+    <p>Only one window can run the timer and the player at a time.</p>
+    <button class="btn btn-primary" type="button" id="takeBack">Use this window instead</button>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* =================================================================
+   Basics
+================================================================= */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
+};
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  if (attrs) for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : String(kid));
+  return el;
+}
+
+const ICONS = {
+  play: '<path class="f" d="M8 5.2v13.6a.8.8 0 0 0 1.2.7l10.6-6.8a.8.8 0 0 0 0-1.4L9.2 4.5A.8.8 0 0 0 8 5.2z"/>',
+  pause: '<rect class="f" x="6.5" y="5" width="4" height="14" rx="1.2"/><rect class="f" x="13.5" y="5" width="4" height="14" rx="1.2"/>',
+  next: '<path class="f" d="M5.5 6.1v11.8a.8.8 0 0 0 1.2.7l8.9-5.9a.8.8 0 0 0 0-1.4L6.7 5.4a.8.8 0 0 0-1.2.7z"/><rect class="f" x="16.4" y="5.5" width="2.3" height="13" rx="1.1"/>',
+  prev: '<path class="f" d="M18.5 6.1v11.8a.8.8 0 0 1-1.2.7l-8.9-5.9a.8.8 0 0 1 0-1.4l8.9-5.9a.8.8 0 0 1 1.2.7z"/><rect class="f" x="5.3" y="5.5" width="2.3" height="13" rx="1.1"/>',
+  shuffle: '<path d="M3 7h3.2c1.9 0 3.1.9 4.2 2.5l3.2 5c1 1.6 2.3 2.5 4.2 2.5H21"/><path d="M3 17h3.2c1.4 0 2.4-.5 3.3-1.4M14.5 8.4c.9-.9 1.9-1.4 3.3-1.4H21"/><path d="M18.5 4.5 21 7l-2.5 2.5M18.5 14.5 21 17l-2.5 2.5"/>',
+  repeat: '<path d="M4 11.5V9.5A3.5 3.5 0 0 1 7.5 6H19"/><path d="m16.5 3.5 2.5 2.5-2.5 2.5"/><path d="M20 12.5v2A3.5 3.5 0 0 1 16.5 18H5"/><path d="m7.5 20.5-2.5-2.5 2.5-2.5"/>',
+  repeatOne: '<path d="M4 11.5V9.5A3.5 3.5 0 0 1 7.5 6H19"/><path d="m16.5 3.5 2.5 2.5-2.5 2.5"/><path d="M20 12.5v2A3.5 3.5 0 0 1 16.5 18H5"/><path d="m7.5 20.5-2.5-2.5 2.5-2.5"/><path d="M11 10.6 12.6 9.6v5"/>',
+  heart: '<path d="M12 19.5s-7.5-4.4-7.5-10.1A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 7.5 2.4c0 5.7-7.5 10.1-7.5 10.1z"/>',
+  heartFill: '<path class="f" d="M12 19.5s-7.5-4.4-7.5-10.1A4.2 4.2 0 0 1 12 7a4.2 4.2 0 0 1 7.5 2.4c0 5.7-7.5 10.1-7.5 10.1z"/>',
+  volume: '<path class="f" d="M4 9.6h3.4L11.6 6v12l-4.2-3.6H4z"/><path d="M15 9.2a4 4 0 0 1 0 5.6M17.6 6.6a7.6 7.6 0 0 1 0 10.8"/>',
+  mute: '<path class="f" d="M4 9.6h3.4L11.6 6v12l-4.2-3.6H4z"/><path d="m15.5 9.5 5 5M20.5 9.5l-5 5"/>',
+  device: '<rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/>',
+  library: '<path d="M5 4.5v15M9.5 4.5v15"/><path d="m14 5 4.6 14.2"/>',
+  sliders: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  close: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+  plus: '<path d="M12 5.5v13M5.5 12h13"/>',
+  reset: '<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4h4"/>',
+  skip: '<path d="m6 6.5 5.5 5.5L6 17.5M13 6.5l5.5 5.5-5.5 5.5"/>',
+  external: '<path d="M14 4.5h5.5V10M19.5 4.5 11 13"/><path d="M18 14v3.5a2 2 0 0 1-2 2H6.5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2H10"/>',
+  note: '<path d="M9 17.5V6.2l10-2v11"/><circle cx="6.6" cy="17.5" r="2.4"/><circle cx="16.6" cy="15.2" r="2.4"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>'
+};
+const svg = name => `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${ICONS[name] || ''}</svg>`;
+function paintIcons(root = document) { $$('[data-icon]', root).forEach(el => { el.innerHTML = svg(el.dataset.icon); }); }
+function setIcon(el, name) { if (el && el.dataset.icon !== name) { el.dataset.icon = name; el.innerHTML = svg(name); } }
+function icon(name) { const s = h('span', { class: 'ic' }); s.innerHTML = svg(name); return s; }
+
+const Toast = {
+  live: new Map(),
+  show(msg, { action, onAction, ms = 5500 } = {}) {
+    const existing = this.live.get(msg);
+    if (existing) { clearTimeout(existing.t); existing.t = setTimeout(() => this.drop(msg), ms); return; }
+    const el = h('div', { class: 'toast', role: 'status' }, h('span', { text: msg }));
+    if (action) el.append(h('button', { type: 'button', text: action, onclick: () => { this.drop(msg); onAction && onAction(); } }));
+    $('#toasts').append(el);
+    this.live.set(msg, { el, t: setTimeout(() => this.drop(msg), ms) });
+  },
+  drop(msg) { const x = this.live.get(msg); if (x) { clearTimeout(x.t); x.el.remove(); this.live.delete(msg); } }
+};
+const toast = (m, o) => Toast.show(m, o);
+
+/* =================================================================
+   Settings and saved state
+================================================================= */
+const DEFAULTS = {
+  focusMin: 25, shortMin: 5, longMin: 15, rounds: 4,
+  autoBreak: true, autoFocus: false, showSeconds: true, wakeLock: true,
+  breakMusic: 'pause', breakVolume: 30, breakPlaylist: null, focusPlaylist: null,
+  pauseWithTimer: true, fade: true, albumTint: true,
+  chime: true, chimeVolume: 60, notify: false,
+  volume: 70
+};
+const S = Object.assign({}, DEFAULTS, store.get('tide.settings', {}));
+const saveSettings = () => store.set('tide.settings', S);
+
+const PHASES = ['focus', 'short', 'long'];
+const PHASE_LABEL = { focus: 'Focus', short: 'Short break', long: 'Long break' };
+const phaseMs = p => S[p + 'Min'] * 60000;
+
+const T = Object.assign({ phase: 'focus', status: 'idle', durationMs: phaseMs('focus'), remainingMs: phaseMs('focus'), endAt: 0, cycleDone: 0, lastTick: 0, intent: '' }, store.get('tide.timer', {}));
+if (!PHASES.includes(T.phase)) T.phase = 'focus';
+if (!['idle', 'running', 'paused'].includes(T.status)) T.status = 'idle';
+const saveTimer = () => store.set('tide.timer', T);
+
+let held = store.get('tide.held', null);   // music the timer paused/changed and should restore
+
+const dayKey = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+let stats = store.get('tide.stats', null);
+function today() { if (!stats || stats.day !== dayKey()) stats = { day: dayKey(), focusMs: 0, rounds: 0 }; return stats; }
+let statsSavedAt = 0;
+function saveStats(force) { if (force || Date.now() - statsSavedAt > 15000) { store.set('tide.stats', today()); statsSavedAt = Date.now(); } }
+
+/* =================================================================
+   Colour: one hue (from the album art) drives every phase
+================================================================= */
+const DEFAULT_TINT = { hue: 158, k: 1 };
+let tint = store.get('tide.tint', DEFAULT_TINT);
+if (!tint || !isFinite(tint.hue) || !isFinite(tint.k)) tint = DEFAULT_TINT;
+
+function srgbToLinear(c) { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+function linearToSrgb(c) { const v = c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055; return Math.round(clamp(v, 0, 1) * 255); }
+function rgbToOklab(r, g, b) {
+  r = srgbToLinear(r); g = srgbToLinear(g); b = srgbToLinear(b);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+}
+function oklchToHex(L, C, hue) {
+  const a = C * Math.cos(hue * Math.PI / 180), b = C * Math.sin(hue * Math.PI / 180);
+  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+  const s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3;
+  const rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s, -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s];
+  return '#' + rgb.map(v => linearToSrgb(v).toString(16).padStart(2, '0')).join('');
+}
+
+function palette(phase) {
+  const base = S.albumTint ? tint : DEFAULT_TINT;
+  const hue = ((phase === 'long' ? base.hue + 48 : base.hue) % 360 + 360) % 360;
+  const k = base.k;
+  const c = (L, C, a) => `oklch(${L} ${(C * k).toFixed(4)} ${hue.toFixed(1)}${a != null ? ' / ' + a : ''})`;
+  const hex = (L, C) => oklchToHex(L, C * k, hue);
+  if (phase === 'focus') return {
+    field: c(.215, .035), tide: c(.262, .045), ink: c(.965, .012), ink2: c(.965, .012, .66), line: c(.965, .012, .14),
+    accent: c(.84, .11), surface: c(.25, .04), onInk: c(.215, .035), scheme: 'dark',
+    hexField: hex(.215, .035), hexTide: hex(.262, .045), hexInk: hex(.965, .012)
+  };
+  return {
+    field: c(.925, .025), tide: c(.875, .035), ink: c(.235, .04), ink2: c(.235, .04, .66), line: c(.235, .04, .13),
+    accent: c(.48, .1), surface: c(.955, .018), onInk: c(.955, .018), scheme: 'light',
+    hexField: hex(.925, .025), hexTide: hex(.875, .035), hexInk: hex(.235, .04)
+  };
+}
+
+const Rooms = {
+  els: null, active: 0, wipeT: 0,
+  init(phase) { this.els = [$('#roomA'), $('#roomB')]; this.els[0].style.zIndex = '1'; this.els[1].style.zIndex = '0'; this.paint(phase, false); },
+  vars(el, p) { el.style.setProperty('--field', p.field); el.style.setProperty('--tide', p.tide); },
+  paintUi(p) {
+    const r = document.documentElement.style;
+    r.setProperty('--ink', p.ink); r.setProperty('--ink-2', p.ink2); r.setProperty('--line', p.line);
+    r.setProperty('--accent', p.accent); r.setProperty('--surface', p.surface); r.setProperty('--on-ink', p.onInk);
+    r.colorScheme = p.scheme;
+    document.body.style.background = p.hexField;
+    const m = $('meta[name="theme-color"]'); if (m) m.content = p.hexField;
+  },
+  paint(phase, wipe) {
+    const p = palette(phase);
+    this.paintUi(p);
+    const cur = this.els[this.active];
+    if (!wipe || reduceMotion.matches) { this.vars(cur, p); return; }
+    const nxt = this.els[1 - this.active];
+    nxt.classList.add('still'); nxt.classList.remove('rise');
+    this.vars(nxt, p);
+    nxt.querySelector('.tide').style.transform = 'translateY(100%)';
+    void nxt.offsetWidth;
+    nxt.classList.remove('still');
+    cur.style.zIndex = '1'; nxt.style.zIndex = '2';
+    nxt.classList.add('rise');
+    this.active = 1 - this.active;
+    clearTimeout(this.wipeT);
+    this.wipeT = setTimeout(() => nxt.classList.remove('rise'), 1600);
+  },
+  apply(phase, opts = {}) { if (this.els) this.paint(phase, !!opts.wipe); },
+  setProgress(p) {
+    if (!this.els) return;
+    const t = this.els[this.active].firstElementChild;
+    const v = `translateY(${((1 - clamp(p, 0, 1)) * 100).toFixed(3)}%)`;
+    if (t.style.transform !== v) t.style.transform = v;
+  }
+};
+
+const tintCache = new Map();
+function extractTint(url) {
+  if (tintCache.has(url)) return tintCache.get(url);
+  const job = new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const N = 40, cv = document.createElement('canvas'); cv.width = cv.height = N;
+        const g = cv.getContext('2d', { willReadFrequently: true });
+        g.drawImage(img, 0, 0, N, N);
+        const d = g.getImageData(0, 0, N, N).data;
+        // Find the hue that covers the most of the cover (weighted by how
+        // colourful each pixel is), then average only the pixels near it.
+        const px = [], bins = new Float64Array(36);
+        let sum = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] < 200) continue;
+          const [L, a, b] = rgbToOklab(d[i], d[i + 1], d[i + 2]);
+          const C = Math.hypot(a, b); n++; sum += C;
+          if (C < 0.025) continue;
+          const hue = (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
+          const w = C * Math.max(0.1, 1 - Math.abs(L - 0.6) * 1.4);
+          px.push([hue, a, b, w]); bins[Math.floor(hue / 10) % 36] += w;
+        }
+        const avg = n ? sum / n : 0;
+        if (!px.length || avg < 0.025) return resolve({ hue: null, chroma: avg });
+        let best = 0, bestV = -1;
+        for (let i = 0; i < 36; i++) { const v = bins[(i + 35) % 36] * .5 + bins[i] + bins[(i + 1) % 36] * .5; if (v > bestV) { bestV = v; best = i; } }
+        const centre = best * 10 + 5;
+        let A = 0, B = 0;
+        for (const [hue, a, b, w] of px) { const dh = Math.abs(((hue - centre + 540) % 360) - 180); if (dh <= 30) { A += a * w; B += b * w; } }
+        resolve({ hue: (Math.atan2(B, A) * 180 / Math.PI + 360) % 360, chroma: avg });
+      } catch (e) { reject(e); }
+    };
+    img.onerror = () => reject(new Error('image'));
+    img.src = url;
+  });
+  tintCache.set(url, job);
+  job.catch(() => tintCache.delete(url));
+  return job;
+}
+const Theme = {
+  async fromImage(url) {
+    if (!S.albumTint || !url) return;
+    let res; try { res = await extractTint(url); } catch { return; }
+    const next = res.hue == null ? { hue: tint.hue, k: 0.18 } : { hue: res.hue, k: clamp(0.55 + res.chroma * 5, 0.55, 1.35) };
+    if (Math.abs(next.hue - tint.hue) < 1.5 && Math.abs(next.k - tint.k) < 0.04) return;
+    tint = next; store.set('tide.tint', tint);
+    Rooms.apply(T.phase);
+    Favicon.draw();
+  }
+};
+
+/* =================================================================
+   Timer
+================================================================= */
+const Clock = {
+  el: null, text: null, suffix: null, label: '',
+  set(text, suffix) {
+    if (text === this.text && suffix === this.suffix) return;
+    const el = this.el;
+    const same = this.text != null && this.text.length === text.length && this.suffix === suffix;
+    if (!same) {
+      el.textContent = '';
+      for (const ch of text) el.append(h('span', { class: ch === ':' ? 'ch colon' : 'ch', text: ch }));
+      if (suffix) el.append(h('span', { class: 'suffix', text: suffix }));
+      const digits = [...text].filter(ch => ch !== ':').length, colons = text.length - digits;
+      el.style.setProperty('--clock-w', (digits * 0.44 + colons * 0.24 + (suffix ? 0.75 : 0) + 0.04).toFixed(3));
+    } else {
+      [...text].forEach((ch, i) => { const s = el.children[i]; if (s.textContent !== ch) s.textContent = ch; });
+    }
+    this.text = text; this.suffix = suffix;
+    const rem = Timer.remaining(), mins = Math.floor(Math.ceil(rem / 1000) / 60);
+    const label = `${mins} minute${mins === 1 ? '' : 's'} left`;
+    if (label !== this.label) { el.setAttribute('aria-label', label); this.label = label; }
+  }
+};
+
+const Timer = {
+  remaining() { return T.status === 'running' ? Math.max(0, T.endAt - Date.now()) : T.remainingMs; },
+  snap() { return { phase: T.phase, status: T.status }; },
+  start() {
+    if (T.status === 'running') return;
+    const prev = this.snap();
+    if (T.remainingMs <= 0) T.remainingMs = T.durationMs;
+    T.endAt = Date.now() + T.remainingMs; T.status = 'running'; T.lastTick = Date.now();
+    this.commit(prev);
+  },
+  pause() {
+    if (T.status !== 'running') return;
+    const prev = this.snap();
+    T.remainingMs = this.remaining(); T.status = 'paused';
+    this.commit(prev);
+  },
+  toggle() { T.status === 'running' ? this.pause() : this.start(); },
+  untouched() { return T.status === 'idle' && T.remainingMs === T.durationMs && T.durationMs === phaseMs(T.phase); },
+  reset() {
+    const prev = this.snap();
+    if (this.untouched()) { if (!T.cycleDone) return; T.cycleDone = 0; }
+    else { T.durationMs = phaseMs(T.phase); T.remainingMs = T.durationMs; T.status = 'idle'; T.endAt = 0; }
+    this.commit(prev);
+  },
+  addMinute() {
+    if (T.status === 'running') T.endAt += 60000; else T.remainingMs += 60000;
+    T.durationMs += 60000;
+    saveTimer(); render(true);
+  },
+  setPhase(phase) {
+    if (phase === T.phase && this.untouched()) return;
+    const prev = this.snap();
+    this.enter(phase, false);
+    this.commit(prev, { phaseChanged: prev.phase !== phase });
+  },
+  enter(phase, run) {
+    T.phase = phase; T.durationMs = phaseMs(phase); T.remainingMs = T.durationMs;
+    T.status = run ? 'running' : 'idle'; T.endAt = run ? Date.now() + T.durationMs : 0; T.lastTick = Date.now();
+  },
+  complete({ skipped = false, silent = false } = {}) {
+    const prev = this.snap(), from = T.phase;
+    let to;
+    if (from === 'focus') { T.cycleDone += 1; today().rounds += 1; saveStats(true); to = T.cycleDone >= S.rounds ? 'long' : 'short'; }
+    else { if (from === 'long') T.cycleDone = 0; to = 'focus'; }
+    const auto = !silent && (to === 'focus' ? S.autoFocus : S.autoBreak);
+    this.enter(to, auto);
+    this.commit(prev, { phaseChanged: true, silent });
+    if (!skipped && !silent) { Sound.chime(to); Notify.phaseEnded(from, to, auto); }
+  },
+  commit(prev, info = {}) {
+    saveTimer();
+    document.body.dataset.phase = T.phase;
+    document.body.dataset.status = T.status;
+    if (info.phaseChanged) Rooms.apply(T.phase, { wipe: true });
+    render(true);
+    if (!info.silent) Link.transition(prev, this.snap());
+    WakeLock.sync();
+  }
+};
+
+let lastTitle = '', lastFavAt = 0, lastTodayAt = 0;
+function fmtClock(ms) {
+  if (S.showSeconds) { const s = Math.ceil(ms / 1000); return [String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'), '']; }
+  return [String(Math.ceil(ms / 60000)), 'min'];
+}
+function render(force) {
+  const rem = Timer.remaining();
+  const [text, suffix] = fmtClock(rem);
+  Clock.set(text, suffix);
+  Rooms.setProgress(document.body.classList.contains('setup-open') ? .22 : T.durationMs > 0 ? 1 - rem / T.durationMs : 0);
+  const shown = suffix ? `${text} ${suffix}` : text;
+  const where = { focus: 'focus', short: 'your break', long: 'your long break' }[T.phase];
+  const title = T.status === 'running' ? `${shown} left in ${where}` : T.status === 'paused' ? `Paused at ${shown}` : `${PHASE_LABEL[T.phase]} ${shown}`;
+  if (title !== lastTitle) { document.title = title; lastTitle = title; }
+  const now = Date.now();
+  if (force || now - lastFavAt > 10000) { Favicon.draw(); lastFavAt = now; }
+  if (force || now - lastTodayAt > 30000) { renderToday(); lastTodayAt = now; }
+  if (force) renderMeta();
+}
+function fmtDuration(ms) {
+  const m = Math.floor(ms / 60000);
+  if (m < 60) return `${m} min`;
+  const hh = Math.floor(m / 60), mm = m % 60;
+  return mm ? `${hh} h ${mm} min` : `${hh} h`;
+}
+function renderToday() {
+  const st = today();
+  $('#today').textContent = st.focusMs >= 60000 ? `${fmtDuration(st.focusMs)} focused today` : '';
+}
+function renderMeta() {
+  $$('.phase-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.phase === T.phase)));
+  $('#phaseName').textContent = PHASE_LABEL[T.phase];
+  const n = S.rounds, done = Math.min(T.cycleDone, n);
+  let txt;
+  if (T.phase === 'focus') txt = `Round ${Math.min(done + 1, n)} of ${n}`;
+  else if (T.phase === 'short') txt = `Round ${Math.min(done + 1, n)} is next`;
+  else txt = done >= n ? `All ${n} rounds done` : 'Round 1 is next';
+  $('#roundText').textContent = txt;
+  const dots = $('#dots');
+  if (dots.children.length !== n) { dots.textContent = ''; for (let i = 0; i < n; i++) dots.append(h('i')); }
+  [...dots.children].forEach((d, i) => { d.className = i < done ? 'done' : (T.phase === 'focus' && i === done ? 'now' : ''); });
+  setIcon($('#startBtn .ic'), T.status === 'running' ? 'pause' : 'play');
+  $('#startLabel').textContent = T.status === 'running' ? 'Pause' : T.status === 'paused' ? 'Resume' : (T.phase === 'focus' ? 'Start focus' : 'Start break');
+  const untouched = Timer.untouched();
+  $('#resetLabel').textContent = untouched && T.cycleDone ? 'Reset rounds' : 'Reset';
+  $('#resetBtn').disabled = untouched && !T.cycleDone;
+  $('#resetBtn').title = untouched && T.cycleDone ? 'Start again from round 1' : 'Reset (R)';
+}
+
+const Favicon = {
+  cv: null,
+  draw() {
+    const link = $('#favicon');
+    if (!link) return;
+    if (!this.cv) { this.cv = document.createElement('canvas'); this.cv.width = this.cv.height = 64; }
+    const g = this.cv.getContext('2d'), p = palette(T.phase);
+    const rem = Timer.remaining(), prog = T.durationMs ? clamp(1 - rem / T.durationMs, 0, 1) : 0;
+    g.clearRect(0, 0, 64, 64);
+    g.save();
+    g.beginPath(); g.roundRect(0, 0, 64, 64, 15); g.clip();
+    g.fillStyle = p.hexField; g.fillRect(0, 0, 64, 64);
+    g.fillStyle = T.phase === 'focus' ? oklchToHex(.42, .06 * (S.albumTint ? tint.k : 1), S.albumTint ? tint.hue : DEFAULT_TINT.hue) : p.hexTide;
+    const hgt = Math.round(64 * prog); g.fillRect(0, 64 - hgt, 64, hgt);
+    g.restore();
+    if (T.status !== 'running') { g.fillStyle = p.hexInk; g.fillRect(21, 19, 8, 26); g.fillRect(35, 19, 8, 26); }
+    try { link.type = 'image/png'; link.href = this.cv.toDataURL('image/png'); } catch {}
+  }
+};
+
+/* Tick from a worker so the clock keeps time even when the window isn't in front. */
+function onTick() {
+  if (Instance.yielded) return;
+  const now = Date.now();
+  if (T.status === 'running') {
+    const gap = now - (T.lastTick || now);
+    if (T.phase === 'focus' && gap > 0 && gap < 120000) { today().focusMs += gap; saveStats(); }
+    T.lastTick = now;
+    if (now >= T.endAt) { Timer.complete(); return; }
+  }
+  render(false);
+  MusicUI.tick();
+  if (Playback.localActive && now - Playback.syncAt > 5000) { Playback.syncAt = now; Playback.syncLocal(); }
+}
+function startTicker() {
+  try {
+    const url = URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 250);'], { type: 'text/javascript' }));
+    const w = new Worker(url);
+    w.onmessage = onTick;
+  } catch {}
+  setInterval(onTick, 1000);
+}
+
+/* =================================================================
+   Chime, notifications, wake lock
+================================================================= */
+const Sound = {
+  ctx: null, out: null,
+  unlock() {
+    try {
+      if (!this.ctx) {
+        const C = window.AudioContext || window.webkitAudioContext; if (!C) return;
+        this.ctx = new C(); this.out = this.ctx.createGain(); this.out.connect(this.ctx.destination);
+      }
+      if (this.ctx.state === 'suspended') this.ctx.resume();
+    } catch {}
+  },
+  bell(t, f, dur, amp) {
+    const c = this.ctx;
+    [[1, 1], [2, .34], [2.92, .16], [4.16, .06]].forEach(([m, a]) => {
+      const o = c.createOscillator(), g = c.createGain(), d = dur / (1 + (m - 1) * .7);
+      o.type = 'sine'; o.frequency.value = f * m;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(amp * a, t + .012);
+      g.gain.exponentialRampToValueAtTime(.0001, t + d);
+      o.connect(g); g.connect(this.out); o.start(t); o.stop(t + d + .05);
+    });
+  },
+  chime(to) {
+    if (!S.chime) return;
+    this.unlock();
+    const c = this.ctx; if (!c) return;
+    this.out.gain.setValueAtTime(clamp(S.chimeVolume / 100, 0, 1) * .6, c.currentTime);
+    const t = c.currentTime + .04;
+    if (to === 'focus') { this.bell(t, 659.25, 1.9, .5); this.bell(t + .24, 493.88, 2.6, .5); }
+    else { this.bell(t, 523.25, 1.9, .5); this.bell(t + .24, 783.99, 2.8, .5); }
+  }
+};
+
+const Notify = {
+  supported: 'Notification' in window,
+  async enable() {
+    if (!this.supported) return false;
+    if (Notification.permission === 'granted') return true;
+    if (Notification.permission === 'denied') return false;
+    try { return (await Notification.requestPermission()) === 'granted'; } catch { return false; }
+  },
+  phaseEnded(from, to, auto) {
+    if (!S.notify || !this.supported || Notification.permission !== 'granted') return;
+    let title, body;
+    if (to === 'focus') { title = 'Back to focus'; body = auto ? `Round ${Math.min(T.cycleDone + 1, S.rounds)} of ${S.rounds} has started.` : 'Press Start when you’re ready.'; }
+    else {
+      const mins = S[to + 'Min'];
+      title = to === 'long' ? 'Time for a long break' : 'Time for a break';
+      body = `Round ${Math.min(T.cycleDone, S.rounds)} of ${S.rounds} done. ` + (auto ? `Your ${mins}-minute break has started.` : `Press Start for a ${mins}-minute break.`);
+    }
+    try { const n = new Notification(title, { body, icon: '/icons/icon-192.png', tag: 'tide', silent: S.chime }); n.onclick = () => { window.focus(); n.close(); }; } catch {}
+  }
+};
+
+const WakeLock = {
+  lock: null, busy: false,
+  async sync() {
+    if (!('wakeLock' in navigator) || this.busy) return;
+    const want = S.wakeLock && T.status === 'running' && document.visibilityState === 'visible';
+    this.busy = true;
+    try {
+      if (want && !this.lock) { this.lock = await navigator.wakeLock.request('screen'); this.lock.addEventListener('release', () => { this.lock = null; }); }
+      else if (!want && this.lock) { await this.lock.release(); this.lock = null; }
+    } catch {} finally { this.busy = false; }
+  }
+};
+
+/* =================================================================
+   Spotify: sign-in (Authorization Code with PKCE)
+================================================================= */
+const ACCOUNTS = 'https://accounts.spotify.com';
+const API = 'https://api.spotify.com/v1';
+const SCOPES = ['streaming', 'user-read-email', 'user-read-private', 'user-read-playback-state', 'user-modify-playback-state', 'user-read-currently-playing', 'playlist-read-private', 'playlist-read-collaborative', 'user-library-read', 'user-library-modify'].join(' ');
+
+class SpotifyError extends Error { constructor(status, message, reason) { super(message); this.status = status; this.reason = reason; } }
+
+function randomString(n) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(n)), x => chars[x % chars.length]).join('');
+}
+async function pkceChallenge(v) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(v));
+  return btoa(String.fromCharCode(...new Uint8Array(d))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+const Auth = {
+  tokens: store.get('tide.tokens', null),
+  refreshing: null,
+  get clientId() { return store.get('tide.clientId', ''); },
+  set clientId(v) { store.set('tide.clientId', v); },
+  get redirectUri() { return location.origin + '/callback'; },
+  get signedIn() { return !!(this.tokens && this.tokens.refresh && this.clientId); },
+  save(j) {
+    this.tokens = { access: j.access_token, refresh: j.refresh_token || (this.tokens && this.tokens.refresh), expiresAt: Date.now() + (Number(j.expires_in) || 3600) * 1000 };
+    store.set('tide.tokens', this.tokens);
+  },
+  async login() {
+    const verifier = randomString(64), state = randomString(16);
+    store.set('tide.pkce', { verifier, state, at: Date.now() });
+    const q = new URLSearchParams({ response_type: 'code', client_id: this.clientId, scope: SCOPES, code_challenge_method: 'S256', code_challenge: await pkceChallenge(verifier), redirect_uri: this.redirectUri, state });
+    location.assign(`${ACCOUNTS}/authorize?${q}`);
+  },
+  async handleRedirect() {
+    const q = new URLSearchParams(location.search);
+    if (location.pathname !== '/callback' && !q.has('code') && !q.has('error')) return;
+    history.replaceState(null, '', '/');
+    if (q.get('error')) { toast(q.get('error') === 'access_denied' ? 'Spotify connection was cancelled.' : `Spotify sign-in failed: ${q.get('error')}`); return; }
+    const saved = store.get('tide.pkce', null); store.del('tide.pkce');
+    if (!q.get('code') || !saved || saved.state !== q.get('state')) { toast('That sign-in link has expired. Connect Spotify again.'); return; }
+    try {
+      const res = await fetch(`${ACCOUNTS}/api/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'authorization_code', code: q.get('code'), redirect_uri: this.redirectUri, client_id: this.clientId, code_verifier: saved.verifier }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || !j.access_token) throw new Error(j.error_description || j.error || `HTTP ${res.status}`);
+      this.save(j);
+      store.set('tide.setupSkipped', false);
+      toast('Spotify is connected.');
+    } catch (e) { toast(`Spotify sign-in failed: ${e.message}`); }
+  },
+  async token() {
+    if (!this.tokens) throw new SpotifyError(401, 'Not signed in', 'NO_TOKEN');
+    if (Date.now() < this.tokens.expiresAt - 60000) return this.tokens.access;
+    return this.refresh();
+  },
+  refresh() {
+    if (this.refreshing) return this.refreshing;
+    const job = this._refresh().finally(() => { if (this.refreshing === job) this.refreshing = null; });
+    this.refreshing = job;
+    return job;
+  },
+  async _refresh() {
+    if (!this.tokens || !this.tokens.refresh) throw new SpotifyError(401, 'Not signed in', 'NO_TOKEN');
+    let res;
+    try {
+      res = await fetch(`${ACCOUNTS}/api/token`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: this.tokens.refresh, client_id: this.clientId }) });
+    } catch { throw new SpotifyError(0, 'Tide can’t reach Spotify. Check your internet connection.', 'NETWORK'); }
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.access_token) {
+      if (res.status === 400 || res.status === 401) this.signOut(true);
+      throw new SpotifyError(401, j.error_description || 'Sign-in expired', 'REFRESH');
+    }
+    this.save(j);
+    return this.tokens.access;
+  },
+  signOut(expired) {
+    this.tokens = null;
+    store.del('tide.tokens'); store.del('tide.me');
+    Me.profile = null;
+    Sdk.disconnect();
+    Playback.stopPoll(); Playback.np = null;
+    Library.reset();
+    MusicUI.render(); SettingsUI.renderAccount();
+    if (expired) toast('Spotify needs you to sign in again.', { action: 'Connect', onAction: () => Setup.show(), ms: 10000 });
+  }
+};
+
+/* =================================================================
+   Spotify Web API
+================================================================= */
+const Api = {
+  blockedUntil: 0,
+  async call(method, path, { query, body, retry = true } = {}) {
+    if (Date.now() < this.blockedUntil) throw new SpotifyError(429, 'Waiting for Spotify', 'WAIT');
+    const token = await Auth.token();
+    const url = new URL(API + path);
+    if (query) for (const [k, v] of Object.entries(query)) if (v != null && v !== '') url.searchParams.set(k, v);
+    let res;
+    try {
+      res = await fetch(url, { method, headers: Object.assign({ Authorization: `Bearer ${token}` }, body ? { 'Content-Type': 'application/json' } : {}), body: body ? JSON.stringify(body) : undefined });
+    } catch { throw new SpotifyError(0, 'Tide can’t reach Spotify. Check your internet connection.', 'NETWORK'); }
+    if (res.status === 401 && retry) { await Auth.refresh(); return this.call(method, path, { query, body, retry: false }); }
+    const text = await res.text();
+    let data = null;
+    if (text) { try { data = JSON.parse(text); } catch { data = null; } }
+    if (res.status === 429) {
+      const ra = parseInt(res.headers.get('Retry-After') || '', 10);
+      const reason = data && data.error && data.error.reason;
+      this.blockedUntil = Date.now() + (ra > 0 ? ra : reason === 'QUOTA_EXCEEDED' ? 300 : 30) * 1000;
+      throw new SpotifyError(429, 'Too many requests', reason || 'RATE');
+    }
+    if (!res.ok) {
+      const err = data && data.error;
+      const msg = (err && (typeof err === 'string' ? err : err.message)) || res.statusText || `HTTP ${res.status}`;
+      throw new SpotifyError(res.status, String(msg), err && err.reason);
+    }
+    return data;
+  },
+  get(p, q) { return this.call('GET', p, { query: q }); },
+  put(p, q, b) { return this.call('PUT', p, { query: q, body: b }); },
+  post(p, q, b) { return this.call('POST', p, { query: q, body: b }); },
+  del(p, q, b) { return this.call('DELETE', p, { query: q, body: b }); }
+};
+
+function describeError(e) {
+  if (!(e instanceof SpotifyError)) return 'Something went wrong talking to Spotify.';
+  const m = String(e.message || '').toLowerCase();
+  if (e.reason === 'NETWORK') return e.message;
+  if (e.reason === 'NO_TOKEN' || e.reason === 'REFRESH') return 'Spotify isn’t connected. Connect it from Settings.';
+  if (e.status === 429) return e.reason === 'QUOTA_EXCEEDED' ? 'Your Spotify developer app has hit its request limit for now. Music controls will come back shortly.' : 'Spotify asked Tide to slow down. Try again in a moment.';
+  if (e.status === 403 && (m.includes('not registered') || m.includes('developer dashboard'))) return 'Spotify says your account isn’t registered for this app. In the developer dashboard open the app’s settings, then User Management, and add your Spotify email.';
+  if (e.status === 403 && (e.reason === 'PREMIUM_REQUIRED' || m.includes('premium'))) return 'Spotify Premium is needed to control playback.';
+  if (e.status === 403) return 'Spotify didn’t allow that right now.';
+  if (e.reason === 'NO_ACTIVE_DEVICE' || e.reason === 'NO_DEVICE') return 'No Spotify device is available. Wait for this window’s player to start, or open Spotify on another device.';
+  if (e.status === 404) return 'Spotify couldn’t find that.';
+  if (e.status === 401) return 'Spotify signed Tide out. Connect again from Settings.';
+  return `Spotify error: ${e.message}`;
+}
+const Errors = {
+  report(e, quiet) {
+    console.warn('[tide]', e);
+    if (e && e.reason === 'WAIT') return;
+    if (quiet && !(e instanceof SpotifyError && (e.status === 403 || e.status === 429 || e.reason === 'QUOTA_EXCEEDED'))) return;
+    toast(describeError(e), { ms: 8000 });
+  }
+};
+const act = fn => Promise.resolve().then(fn).catch(e => Errors.report(e));
+
+const Me = {
+  profile: store.get('tide.me', null),
+  async load() {
+    try { this.profile = await Api.get('/me'); store.set('tide.me', this.profile); }
+    catch (e) { Errors.report(e, true); }
+    SettingsUI.renderAccount();
+  }
+};
+
+/* =================================================================
+   Spotify Web Playback SDK: this window as a Spotify Connect device
+================================================================= */
+const Sdk = {
+  player: null, deviceId: null, ready: false, failed: null, activated: false, started: false, blocked: false, authRetried: false, loadTimer: 0,
+  load() {
+    if (this.started) return;
+    this.started = true; this.failed = null;
+    if (window.Spotify && window.Spotify.Player) { this.init(); return; }
+    window.onSpotifyWebPlaybackSDKReady = () => this.init();
+    if (!$('#spotify-sdk')) {
+      const s = h('script', { id: 'spotify-sdk', src: 'https://sdk.scdn.co/spotify-player.js', async: true });
+      s.onerror = () => this.fail('load');
+      document.head.append(s);
+    }
+    this.loadTimer = setTimeout(() => { if (!this.player) this.fail('load'); }, 25000);
+  },
+  init() {
+    clearTimeout(this.loadTimer);
+    if (this.player || !Auth.signedIn) return;
+    const p = new window.Spotify.Player({ name: 'Tide', getOAuthToken: cb => { Auth.token().then(cb, () => {}); }, volume: clamp(S.volume / 100, 0, 1) });
+    p.addListener('ready', ({ device_id }) => { this.deviceId = device_id; this.ready = true; this.failed = null; MusicUI.render(); Playback.refresh(); });
+    p.addListener('not_ready', () => { this.ready = false; MusicUI.render(); });
+    p.addListener('initialization_error', ({ message }) => { console.warn(message); this.fail('init'); });
+    p.addListener('account_error', ({ message }) => { console.warn(message); this.fail('account'); });
+    p.addListener('authentication_error', async ({ message }) => {
+      console.warn(message);
+      if (this.authRetried) return this.fail('auth');
+      this.authRetried = true;
+      try { await Auth.refresh(); p.connect(); } catch { this.fail('auth'); }
+    });
+    p.addListener('playback_error', ({ message }) => { console.warn(message); toast('Spotify couldn’t play that. Try another song or playlist.'); });
+    p.addListener('player_state_changed', st => Playback.onSdkState(st));
+    p.addListener('autoplay_failed', () => { this.blocked = true; toast('Your browser blocked the music from starting. Click anywhere in Tide to let it play.', { ms: 9000 }); });
+    p.connect().then(ok => { if (!ok) this.fail('init'); }, () => this.fail('init'));
+    this.player = p;
+  },
+  fail(kind) { this.failed = kind; this.ready = false; MusicUI.render(); },
+  failMessage() {
+    return {
+      load: 'The Spotify player didn’t load in this window. A browser extension may be blocking it. You can still control Spotify playing on another device.',
+      init: 'This browser can’t play Spotify inside a window. Chrome or Edge work best. You can still control Spotify playing on another device.',
+      account: 'Spotify won’t stream to this window. Playing here needs Spotify Premium.',
+      auth: 'Spotify didn’t accept the sign-in for the player. Disconnect and connect again from Settings.'
+    }[this.failed] || '';
+  },
+  activate() { if (this.player && !this.activated) { try { this.player.activateElement(); } catch {} this.activated = true; } },
+  gesture() {
+    this.activate();
+    if (this.blocked && this.player) { this.blocked = false; try { this.player.activateElement(); this.player.resume(); } catch {} }
+  },
+  disconnect() {
+    try { this.player && this.player.disconnect(); } catch {}
+    clearTimeout(this.loadTimer);
+    this.player = null; this.ready = false; this.deviceId = null; this.started = false; this.activated = false; this.authRetried = false;
+  }
+};
+
+let fadeToken = 0;
+async function fadeLocal(target, ms) {
+  const p = Sdk.player; if (!p) return;
+  const mine = ++fadeToken;
+  let from = S.volume / 100;
+  try { const v = await p.getVolume(); if (typeof v === 'number' && !isNaN(v)) from = v; } catch {}
+  const steps = Math.max(1, Math.round(ms / 70));
+  for (let i = 1; i <= steps; i++) {
+    if (mine !== fadeToken) return;
+    try { await p.setVolume(clamp(from + (target - from) * i / steps, 0, 1)); } catch {}
+    await sleep(ms / steps);
+  }
+}
+
+function pickImage(images, min) {
+  if (!images || !images.length) return null;
+  const sorted = images.slice().sort((a, b) => (b.width || 640) - (a.width || 640));
+  const fit = sorted.filter(i => (i.width || 640) >= min);
+  return (fit.length ? fit[fit.length - 1] : sorted[0]).url;
+}
+function idFromUri(uri) { const p = String(uri || '').split(':'); return p.length >= 3 ? p[p.length - 1] : null; }
+
+function fromSdk(st) {
+  const t = st.track_window && st.track_window.current_track;
+  const images = t && t.album && t.album.images;
+  return {
+    isLocal: true,
+    type: t && t.type === 'episode' ? 'episode' : 'track',
+    trackUri: t ? t.uri : null, trackId: t ? (t.id || idFromUri(t.uri)) : null,
+    name: t ? t.name : '', artists: t ? (t.artists || []).map(a => ({ name: a.name, uri: a.uri })) : [],
+    albumName: t && t.album ? t.album.name : '', albumUri: t && t.album ? t.album.uri : null,
+    image: pickImage(images, 300), thumb: pickImage(images, 64),
+    durationMs: st.duration || (t && t.duration_ms) || 0, positionMs: st.position || 0, at: Date.now(),
+    isPlaying: !st.paused, shuffle: !!st.shuffle, repeat: ['off', 'context', 'track'][st.repeat_mode] || 'off',
+    contextUri: st.context && st.context.uri ? st.context.uri : null,
+    disallows: st.disallows || {},
+    device: { id: Sdk.deviceId, name: 'This window', type: 'Computer', volume: S.volume, supportsVolume: true }
+  };
+}
+function fromApi(j) {
+  const it = j.item, ep = j.currently_playing_type === 'episode';
+  const images = it ? (ep ? (it.images || (it.show && it.show.images)) : (it.album && it.album.images)) : null;
+  const d = j.device || {};
+  return {
+    isLocal: !!(Sdk.deviceId && d.id === Sdk.deviceId),
+    type: ep ? 'episode' : 'track',
+    trackUri: it ? it.uri : null, trackId: it ? it.id : null,
+    name: it ? it.name : '', artists: it ? (ep ? (it.show ? [{ name: it.show.name, uri: it.show.uri }] : []) : (it.artists || []).map(a => ({ name: a.name, uri: a.uri }))) : [],
+    albumName: it ? (ep ? (it.show && it.show.name) : (it.album && it.album.name)) : '', albumUri: it && !ep && it.album ? it.album.uri : null,
+    image: pickImage(images, 300), thumb: pickImage(images, 64),
+    durationMs: it ? it.duration_ms : 0, positionMs: j.progress_ms || 0, at: Date.now(),
+    isPlaying: !!j.is_playing, shuffle: !!j.shuffle_state, repeat: j.repeat_state || 'off',
+    contextUri: j.context && j.context.uri ? j.context.uri : null,
+    disallows: (j.actions && j.actions.disallows) || {},
+    device: { id: d.id || null, name: d.name || 'Spotify', type: d.type || '', volume: d.volume_percent, supportsVolume: d.supports_volume !== false && d.volume_percent != null }
+  };
+}
+
+/* =================================================================
+   Playback: one controller for this window and remote devices
+================================================================= */
+const Playback = {
+  np: null, pollT: 0, syncAt: 0, volT: 0,
+  get localActive() { return !!(this.np && this.np.isLocal && Sdk.ready && Sdk.player); },
+  position() {
+    const n = this.np; if (!n) return 0;
+    return n.isPlaying ? Math.min(n.durationMs || Infinity, n.positionMs + (Date.now() - n.at)) : n.positionMs;
+  },
+  set(np) {
+    const prev = this.np;
+    this.np = np;
+    MusicUI.render();
+    if (np && np.trackUri && (!prev || prev.trackUri !== np.trackUri)) MusicUI.trackChanged(np);
+    if (np && (!prev || prev.contextUri !== np.contextUri || prev.trackUri !== np.trackUri) && Library.isOpen) Library.markPlaying();
+  },
+  onSdkState(st) {
+    if (Instance.yielded) return;
+    if (!st) {
+      if (this.np && this.np.isLocal) this.set(Object.assign({}, this.np, { isLocal: false, isPlaying: false, at: Date.now() }));
+      this.poll(600);
+      return;
+    }
+    this.stopPoll();
+    this.set(fromSdk(st));
+  },
+  async syncLocal() {
+    if (!this.localActive) return;
+    try { const st = await Sdk.player.getCurrentState(); if (st) this.set(fromSdk(st)); else this.onSdkState(null); } catch {}
+  },
+  async refresh() {
+    clearTimeout(this.pollT);
+    if (!Auth.signedIn || Instance.yielded) return;
+    try {
+      const j = await Api.get('/me/player', { additional_types: 'episode' });
+      if (j && j.device && Sdk.ready && Sdk.player && j.device.id === Sdk.deviceId) {
+        const st = await Sdk.player.getCurrentState().catch(() => null);
+        if (st) { this.set(fromSdk(st)); return; }
+      }
+      this.set(j ? fromApi(j) : null);
+    } catch (e) { Errors.report(e, true); }
+    finally { this.schedule(); }
+  },
+  schedule() {
+    clearTimeout(this.pollT);
+    if (!Auth.signedIn || this.localActive || Instance.yielded) return;
+    const n = this.np;
+    let ms = 20000;
+    if (n && n.isPlaying && n.durationMs) ms = clamp(n.durationMs - this.position() + 800, 1500, 10000);
+    if (document.hidden) ms = Math.max(ms, 30000);
+    ms = Math.max(ms, Api.blockedUntil - Date.now() + 500);
+    this.pollT = setTimeout(() => this.refresh(), ms);
+  },
+  poll(ms) { clearTimeout(this.pollT); this.pollT = setTimeout(() => this.refresh(), ms); },
+  stopPoll() { clearTimeout(this.pollT); },
+  devQ() { const id = this.np && this.np.device && this.np.device.id; return id ? { device_id: id } : {}; },
+  optimistic(patch) {
+    if (!this.np) return;
+    const pos = this.position();
+    this.np = Object.assign({}, this.np, { positionMs: pos }, patch, { at: Date.now() });
+    MusicUI.render();
+  },
+  async ensureDevice() {
+    const n = this.np, cur = n && n.device && n.device.id;
+    if (cur && (!n.isLocal || Sdk.ready)) return cur;
+    if (Sdk.ready) return Sdk.deviceId;
+    const d = await Api.get('/me/player/devices');
+    const list = ((d && d.devices) || []).filter(x => !x.is_restricted);
+    const pick = list.find(x => x.is_active) || list[0];
+    if (!pick) throw new SpotifyError(404, 'No device', 'NO_DEVICE');
+    return pick.id;
+  },
+  async play(body) {
+    Sdk.activate();
+    let id = await this.ensureDevice();
+    const send = dev => Api.put('/me/player/play', { device_id: dev }, body && Object.keys(body).length ? body : undefined);
+    try { await send(id); }
+    catch (e) {
+      if ((e.status === 404 || e.status === 502 || e.reason === 'NO_ACTIVE_DEVICE') && Sdk.ready && id !== Sdk.deviceId) { id = Sdk.deviceId; await send(id); }
+      else throw e;
+    }
+    this.poll(id === Sdk.deviceId ? 2500 : 900);
+  },
+  async resume({ fade = false } = {}) {
+    Sdk.activate();
+    if (this.localActive) {
+      const p = Sdk.player;
+      // After a long pause the in-window player can lose its place; the
+      // Web API below picks it up again from Spotify's side.
+      const st = await p.getCurrentState().catch(() => null);
+      if (st) {
+        if (fade && S.fade) { fadeToken++; await p.setVolume(0).catch(() => {}); await p.resume(); this.optimistic({ isPlaying: true }); await fadeLocal(S.volume / 100, 1600); }
+        else { await p.resume(); this.optimistic({ isPlaying: true }); }
+        return;
+      }
+    }
+    try { await Api.put('/me/player/play', this.devQ()); }
+    catch (e) {
+      if ((e.status === 404 || e.reason === 'NO_ACTIVE_DEVICE') && Sdk.ready) await Api.put('/me/player', null, { device_ids: [Sdk.deviceId], play: true });
+      else throw e;
+    }
+    this.optimistic({ isPlaying: true });
+    this.poll(1000);
+  },
+  async pause({ fade = false } = {}) {
+    if (this.localActive) {
+      const p = Sdk.player;
+      if (fade && S.fade) { await fadeLocal(0, 1100); await p.pause(); this.optimistic({ isPlaying: false }); await p.setVolume(S.volume / 100).catch(() => {}); }
+      else { await p.pause(); this.optimistic({ isPlaying: false }); }
+      return;
+    }
+    await Api.put('/me/player/pause', this.devQ());
+    this.optimistic({ isPlaying: false });
+    this.poll(1500);
+  },
+  async toggle() {
+    Link.userTookControl();
+    const n = this.np;
+    if (!n || !n.trackUri) {
+      if (S.focusPlaylist) return this.play({ context_uri: S.focusPlaylist.uri });
+      Library.open('playlists');
+      return;
+    }
+    return n.isPlaying ? this.pause() : this.resume();
+  },
+  async next() { if (this.localActive) return Sdk.player.nextTrack(); await Api.post('/me/player/next', this.devQ()); this.poll(700); },
+  async prev() { if (this.localActive) return Sdk.player.previousTrack(); await Api.post('/me/player/previous', this.devQ()); this.poll(700); },
+  async seek(ms) {
+    ms = Math.max(0, Math.round(ms));
+    this.optimistic({ positionMs: ms });
+    if (this.localActive) return Sdk.player.seek(ms);
+    await Api.put('/me/player/seek', Object.assign({ position_ms: ms }, this.devQ()));
+  },
+  setVolume(pct) {
+    pct = Math.round(clamp(pct, 0, 100));
+    fadeToken++;
+    if (!this.np || this.localActive) {
+      S.volume = pct; saveSettings();
+      if (Sdk.player) Sdk.player.setVolume(pct / 100).catch(() => {});
+      if (this.np) this.np = Object.assign({}, this.np, { device: Object.assign({}, this.np.device, { volume: pct }) });
+      return;
+    }
+    this.np = Object.assign({}, this.np, { device: Object.assign({}, this.np.device, { volume: pct }) });
+    clearTimeout(this.volT);
+    this.volT = setTimeout(() => act(() => Api.put('/me/player/volume', Object.assign({ volume_percent: pct }, this.devQ()))), 250);
+  },
+  currentVolume() { const n = this.np; return n && !n.isLocal && n.device && n.device.volume != null ? n.device.volume : S.volume; },
+  async rampVolume(pct) {
+    if (this.localActive) return fadeLocal(pct / 100, 1400);
+    if (this.np && this.np.device && this.np.device.supportsVolume) {
+      this.np = Object.assign({}, this.np, { device: Object.assign({}, this.np.device, { volume: pct }) });
+      MusicUI.render();
+      await Api.put('/me/player/volume', Object.assign({ volume_percent: Math.round(pct) }, this.devQ()));
+    }
+  },
+  async toggleShuffle() {
+    if (!this.np) return;
+    const st = !this.np.shuffle;
+    this.optimistic({ shuffle: st });
+    await Api.put('/me/player/shuffle', Object.assign({ state: st }, this.devQ()));
+  },
+  async cycleRepeat() {
+    if (!this.np) return;
+    const order = ['off', 'context', 'track'];
+    const st = order[(order.indexOf(this.np.repeat) + 1) % 3];
+    this.optimistic({ repeat: st });
+    await Api.put('/me/player/repeat', Object.assign({ state: st }, this.devQ()));
+  },
+  async transfer(id) {
+    const play = !!(this.np && this.np.isPlaying);
+    await Api.put('/me/player', null, { device_ids: [id], play });
+    this.poll(id === Sdk.deviceId ? 2500 : 1200);
+  },
+  async queue(uri) {
+    await Api.post('/me/player/queue', Object.assign({ uri }, this.devQ()));
+    toast('Added to the queue.');
+  }
+};
+
+/* =================================================================
+   The link between the timer and the music
+================================================================= */
+const Link = {
+  chain: Promise.resolve(),
+  setHeld(v) { held = v; if (v) store.set('tide.held', v); else store.del('tide.held'); },
+  userTookControl() { if (held) this.setHeld(null); },
+  transition(prev, next) {
+    if (!Auth.signedIn) return;
+    const wasF = prev.phase === 'focus' && prev.status === 'running';
+    const isF = next.phase === 'focus' && next.status === 'running';
+    let job = null;
+    if (!wasF && isF) job = () => this.enterFocus();
+    else if (wasF && !isF) job = next.phase !== 'focus' ? () => this.enterBreak() : (S.pauseWithTimer ? () => this.hold() : null);
+    if (job) this.chain = this.chain.then(job).catch(e => Errors.report(e));
+  },
+  async playingNow() {
+    if (!Playback.localActive) await Playback.refresh();
+    return !!(Playback.np && Playback.np.isPlaying);
+  },
+  async hold() {
+    if (await this.playingNow()) { this.setHeld({ kind: 'pause' }); await Playback.pause({ fade: true }); }
+  },
+  async enterBreak() {
+    switch (S.breakMusic) {
+      case 'pause': return this.hold();
+      case 'duck': {
+        if (!(await this.playingNow())) return;
+        const vol = Playback.currentVolume();
+        this.setHeld({ kind: 'duck', volume: vol });
+        return Playback.rampVolume(Math.max(1, Math.round(vol * S.breakVolume / 100)));
+      }
+      case 'switch': {
+        if (!S.breakPlaylist) return this.hold();
+        const playing = await this.playingNow(), n = Playback.np;
+        const ctx = n && n.trackUri ? { context: n.contextUri, track: n.trackUri, position: Math.round(Playback.position()) } : null;
+        this.setHeld({ kind: 'switch', ctx, wasPlaying: playing });
+        return Playback.play({ context_uri: S.breakPlaylist.uri });
+      }
+      default: return;
+    }
+  },
+  async enterFocus() {
+    const hv = held;
+    if (hv) {
+      this.setHeld(null);
+      if (hv.kind === 'pause') { if (await this.playingNow()) return; return Playback.resume({ fade: true }); }
+      if (hv.kind === 'duck') return Playback.rampVolume(hv.volume);
+      if (hv.kind === 'switch') {
+        if (hv.ctx && hv.wasPlaying) {
+          const c = hv.ctx;
+          if (c.context) {
+            try { return await Playback.play({ context_uri: c.context, offset: { uri: c.track }, position_ms: c.position }); }
+            catch (e) { if (e.status !== 400 && e.status !== 404) throw e; }
+          }
+          return Playback.play({ uris: [c.track], position_ms: c.position });
+        }
+        if (Playback.np && Playback.np.isPlaying) return Playback.pause();
+        return;
+      }
+    }
+    if (S.focusPlaylist && !(Playback.np && Playback.np.trackUri)) return Playback.play({ context_uri: S.focusPlaylist.uri });
+  }
+};
+
+/* =================================================================
+   Music panel
+================================================================= */
+const fmtTime = ms => { const s = Math.max(0, Math.floor((ms || 0) / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+const openUrl = uri => { const p = String(uri || '').split(':'); return p.length === 3 && p[0] === 'spotify' ? `https://open.spotify.com/${p[1]}/${p[2]}` : null; };
+function setRange(el, v, max) { el.value = v; el.style.setProperty('--val', `${max ? clamp(v / max * 100, 0, 100) : 0}%`); }
+
+const MusicUI = {
+  seeking: false, artUrl: null,
+  render() {
+    const n = Playback.np;
+    const state = !Auth.signedIn ? 'off' : (n && n.trackUri ? 'now' : 'idle');
+    $('#musicOff').hidden = state !== 'off';
+    $('#musicIdle').hidden = state !== 'idle';
+    $('#musicNow').hidden = state !== 'now';
+    if (state === 'idle') {
+      $('#idleText').textContent = Sdk.failed ? Sdk.failMessage() : Sdk.ready ? 'Pick a playlist to get started. It plays right here in this window.' : 'Starting the player…';
+    }
+    if (state !== 'now') return;
+    const title = $('#trackTitle');
+    title.textContent = n.name || 'Unknown';
+    const tUrl = n.trackId ? `https://open.spotify.com/${n.type}/${n.trackId}` : null;
+    if (tUrl) title.href = tUrl; else title.removeAttribute('href');
+    const link = $('#artLink'); const aUrl = openUrl(n.albumUri) || tUrl;
+    if (aUrl) link.href = aUrl; else link.removeAttribute('href');
+    const artists = $('#trackArtists');
+    const sig = n.artists.map(a => a.name + a.uri).join('|');
+    if (artists.dataset.sig !== sig) {
+      artists.dataset.sig = sig; artists.textContent = '';
+      n.artists.forEach((a, i) => {
+        if (i) artists.append(', ');
+        const u = openUrl(a.uri);
+        artists.append(u ? h('a', { href: u, target: '_blank', rel: 'noopener', text: a.name }) : a.name);
+      });
+    }
+    if (n.image !== this.artUrl) this.setArt(n.image);
+    setIcon($('#playBtn .ic'), n.isPlaying ? 'pause' : 'play');
+    $('#playBtn').setAttribute('aria-label', n.isPlaying ? 'Pause music' : 'Play music');
+    const sh = $('#shuffleBtn'); sh.setAttribute('aria-pressed', String(n.shuffle)); sh.disabled = !!n.disallows.toggling_shuffle;
+    const rp = $('#repeatBtn'); rp.setAttribute('aria-pressed', String(n.repeat !== 'off')); setIcon(rp.querySelector('.ic'), n.repeat === 'track' ? 'repeatOne' : 'repeat');
+    rp.title = { off: 'Repeat is off', context: 'Repeating this playlist or album', track: 'Repeating this song' }[n.repeat] || 'Repeat';
+    rp.disabled = !!(n.disallows.toggling_repeat_context && n.disallows.toggling_repeat_track);
+    $('#prevBtn').disabled = !!n.disallows.skipping_prev && !n.isLocal;
+    $('#nextBtn').disabled = !!n.disallows.skipping_next && !n.isLocal;
+    const dev = $('#deviceBtn');
+    $('#deviceName').textContent = n.isLocal ? 'This window' : (n.device.name || 'Spotify');
+    dev.classList.toggle('remote', !n.isLocal);
+    const vw = $('#volumeWrap');
+    vw.style.visibility = n.isLocal || n.device.supportsVolume ? 'visible' : 'hidden';
+    const vol = n.isLocal ? S.volume : (n.device.volume != null ? n.device.volume : S.volume);
+    if (document.activeElement !== $('#volume')) setRange($('#volume'), vol, 100);
+    setIcon($('#muteBtn .ic'), vol === 0 ? 'mute' : 'volume');
+    this.tick(true);
+  },
+  setArt(url) {
+    this.artUrl = url;
+    const img = $('#art');
+    img.classList.remove('loaded');
+    if (!url) { img.removeAttribute('src'); return; }
+    img.onload = () => { if (this.artUrl === url) img.classList.add('loaded'); };
+    img.src = url;
+  },
+  tick() {
+    const n = Playback.np;
+    if (!n || !n.trackUri || this.seeking || $('#musicNow').hidden) return;
+    const pos = Playback.position(), dur = n.durationMs || 0;
+    setRange($('#seek'), dur ? Math.round(pos / dur * 1000) : 0, 1000);
+    $('#tPos').textContent = fmtTime(pos);
+    $('#tDur').textContent = fmtTime(dur);
+  },
+  trackChanged(n) {
+    Theme.fromImage(n.thumb || n.image);
+    Like.check(n);
+  }
+};
+
+const Like = {
+  uri: null, saved: false,
+  async check(n) {
+    this.uri = n.trackUri; this.saved = false; this.render();
+    if (!/^spotify:(track|episode):/.test(n.trackUri || '')) return;
+    try { const r = await Api.get('/me/library/contains', { uris: n.trackUri }); if (this.uri === n.trackUri) { this.saved = !!(Array.isArray(r) && r[0]); this.render(); } } catch (e) { Errors.report(e, true); }
+  },
+  async toggle() {
+    if (!this.uri) return;
+    const want = !this.saved; this.saved = want; this.render();
+    try { await Api.call(want ? 'PUT' : 'DELETE', '/me/library', { query: { uris: this.uri } }); toast(want ? 'Saved to Liked Songs.' : 'Removed from Liked Songs.'); }
+    catch (e) { this.saved = !want; this.render(); Errors.report(e); }
+  },
+  render() {
+    const b = $('#likeBtn');
+    b.setAttribute('aria-pressed', String(this.saved));
+    setIcon(b.querySelector('.ic'), this.saved ? 'heartFill' : 'heart');
+    b.title = this.saved ? 'Remove from Liked Songs' : 'Save to Liked Songs';
+  }
+};
+
+const DeviceMenu = {
+  isOpen: false,
+  async toggle() {
+    if (this.isOpen) return this.close();
+    const menu = $('#deviceMenu'), btn = $('#deviceBtn');
+    this.isOpen = true; menu.hidden = false; btn.setAttribute('aria-expanded', 'true');
+    menu.textContent = ''; menu.append(h('div', { class: 'menu-note', text: 'Looking for devices…' }));
+    this.place();
+    try {
+      const d = await Api.get('/me/player/devices');
+      if (this.isOpen) this.fill(((d && d.devices) || []).filter(x => !x.is_restricted));
+    } catch (e) { menu.textContent = ''; menu.append(h('div', { class: 'menu-note', text: describeError(e) })); }
+  },
+  place() {
+    const menu = $('#deviceMenu'), r = $('#deviceBtn').getBoundingClientRect();
+    const w = menu.offsetWidth || 270;
+    menu.style.left = `${clamp(r.right - w, 8, innerWidth - w - 8)}px`;
+    menu.style.bottom = `${innerHeight - r.top + 8}px`;
+    menu.style.top = 'auto';
+  },
+  fill(list) {
+    const menu = $('#deviceMenu');
+    menu.textContent = '';
+    if (Sdk.ready && !list.some(d => d.id === Sdk.deviceId)) list.unshift({ id: Sdk.deviceId, name: 'Tide', type: 'Computer', is_active: !!(Playback.np && Playback.np.isLocal) });
+    if (!list.length) { menu.append(h('div', { class: 'menu-note', text: 'No devices found. Open Spotify on your computer or phone and they’ll show up here.' })); return; }
+    list.sort((a, b) => (b.id === Sdk.deviceId) - (a.id === Sdk.deviceId));
+    for (const d of list) {
+      const mine = d.id === Sdk.deviceId;
+      const b = h('button', { type: 'button', role: 'menuitemradio', 'aria-checked': String(!!d.is_active), class: d.is_active ? 'on' : '' },
+        icon(d.is_active ? 'check' : 'device'),
+        h('span', null, h('span', { text: mine ? 'This window' : d.name }), h('small', { text: mine ? 'Plays here in Tide' : d.type })));
+      b.addEventListener('click', () => { this.close(); if (!d.is_active) act(() => Playback.transfer(d.id)); });
+      menu.append(b);
+    }
+    this.place();
+  },
+  close() { this.isOpen = false; $('#deviceMenu').hidden = true; $('#deviceBtn').setAttribute('aria-expanded', 'false'); }
+};
+
+/* =================================================================
+   Library drawer: playlists, liked songs, search, queue
+================================================================= */
+function row({ img, round, title, sub, onPlay, onAdd, playing, placeholder }) {
+  const art = img ? h('img', { class: 'row-art' + (round ? ' round' : ''), src: img, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+                  : h('span', { class: 'row-art' + (round ? ' round' : '') }, icon(placeholder || 'note'));
+  const text = h('span', { class: 'row-text' }, h('span', { class: 'row-title', text: title }), sub ? h('span', { class: 'row-sub', text: sub }) : null);
+  const main = onPlay ? h('button', { class: 'row-main', type: 'button', title: `Play ${title}`, onclick: () => act(onPlay) }, art, text) : h('div', { class: 'row-main' }, art, text);
+  const r = h('div', { class: 'row' + (playing ? ' playing' : '') }, main);
+  if (onAdd) r.append(h('button', { class: 'icon-btn row-add', type: 'button', title: 'Add to queue', 'aria-label': `Add ${title} to the queue`, onclick: () => act(onAdd) }, icon('plus')));
+  return r;
+}
+const artistNames = list => (list || []).map(a => a.name).join(', ');
+const note = text => h('p', { class: 'drawer-note', text });
+
+const Library = {
+  isOpen: false, tab: 'playlists', playlists: null, liked: null, likedTotal: 0, searchT: 0, seq: 0,
+  reset() { this.playlists = null; this.liked = null; this.likedTotal = 0; },
+  open(tab) {
+    if (!Auth.signedIn) { Setup.show(); return; }
+    this.isOpen = true;
+    const d = $('#drawer'); d.classList.add('open'); d.setAttribute('aria-hidden', 'false');
+    this.select(tab || this.tab);
+  },
+  close() { this.isOpen = false; const d = $('#drawer'); d.classList.remove('open'); d.setAttribute('aria-hidden', 'true'); },
+  toggle(tab) { this.isOpen ? this.close() : this.open(tab); },
+  select(tab) {
+    this.tab = tab;
+    $$('#drawer .tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+    $('#searchBox').hidden = tab !== 'search';
+    this.render();
+    if (tab === 'search') setTimeout(() => $('#searchInput').focus(), 60);
+  },
+  body() { return $('#drawerBody'); },
+  show(...nodes) { const b = this.body(); b.textContent = ''; b.append(...nodes.flat(Infinity).filter(Boolean)); },
+  render() {
+    ({ playlists: () => this.renderPlaylists(), liked: () => this.renderLiked(), search: () => this.renderSearch(), queue: () => this.renderQueue() })[this.tab]();
+  },
+  markPlaying() { if (this.tab === 'playlists' && this.playlists) this.renderPlaylists(); },
+  async loadPlaylists(force) {
+    if (this.playlists && !force) return this.playlists;
+    const all = [];
+    for (let page = 0; page < 6; page++) {
+      const j = await Api.get('/me/playlists', { limit: 50, offset: page * 50 });
+      all.push(...((j && j.items) || []).filter(Boolean));
+      if (!j || !j.next) break;
+    }
+    this.playlists = all;
+    return all;
+  },
+  async renderPlaylists() {
+    if (!this.playlists) this.show(note('Loading your playlists…'));
+    let list;
+    try { list = await this.loadPlaylists(); } catch (e) { if (this.tab === 'playlists') this.show(note(describeError(e))); return; }
+    if (this.tab !== 'playlists') return;
+    const ctx = Playback.np && Playback.np.contextUri;
+    const nodes = [row({ title: 'Liked Songs', sub: 'Your saved songs', placeholder: 'heart', onPlay: () => this.select('liked') })];
+    for (const p of list) {
+      const total = p.items && p.items.total != null ? p.items.total : (p.tracks && p.tracks.total != null ? p.tracks.total : null);
+      const owner = p.owner && p.owner.display_name;
+      const sub = [owner ? `By ${owner}` : null, total != null ? `${total} song${total === 1 ? '' : 's'}` : null].filter(Boolean).join(', ');
+      nodes.push(row({ img: pickImage(p.images, 60), title: p.name || 'Untitled playlist', sub, playing: ctx === p.uri, onPlay: () => Playback.play({ context_uri: p.uri }) }));
+    }
+    if (!list.length) nodes.push(note('You don’t have any playlists yet. Search for one instead.'));
+    this.show(nodes);
+  },
+  async loadLiked(more) {
+    const off = more && this.liked ? this.liked.length : 0;
+    const j = await Api.get('/me/tracks', { limit: 50, offset: off });
+    const items = ((j && j.items) || []).map(x => x.track || x.item).filter(Boolean);
+    this.liked = more && this.liked ? this.liked.concat(items) : items;
+    this.likedTotal = (j && j.total) || this.liked.length;
+  },
+  async playLiked(index, shuffle) {
+    if (shuffle != null && Playback.np) await Api.put('/me/player/shuffle', Object.assign({ state: !!shuffle }, Playback.devQ())).catch(() => {});
+    const me = Me.profile;
+    if (me && me.id) {
+      try { await Playback.play({ context_uri: `spotify:user:${me.id}:collection`, offset: { position: index } }); return; }
+      catch (e) { if (e.status !== 400 && e.status !== 404 && e.status !== 403) throw e; }
+    }
+    await Playback.play({ uris: this.liked.map(t => t.uri), offset: { position: index } });
+  },
+  async renderLiked() {
+    if (!this.liked) {
+      this.show(note('Loading your liked songs…'));
+      try { await this.loadLiked(false); } catch (e) { if (this.tab === 'liked') this.show(note(describeError(e))); return; }
+    }
+    if (this.tab !== 'liked') return;
+    const cur = Playback.np && Playback.np.trackUri;
+    const nodes = [];
+    if (this.liked.length) nodes.push(h('div', { class: 'list-actions' },
+      h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => act(() => this.playLiked(0, false)) }, icon('play'), 'Play all'),
+      h('button', { class: 'btn btn-line btn-sm', type: 'button', onclick: () => act(() => this.playLiked(Math.floor(Math.random() * this.liked.length), true)) }, icon('shuffle'), 'Shuffle')));
+    this.liked.forEach((t, i) => nodes.push(row({ img: pickImage(t.album && t.album.images, 60), title: t.name, sub: artistNames(t.artists), playing: cur === t.uri, onPlay: () => this.playLiked(i), onAdd: () => Playback.queue(t.uri) })));
+    if (!this.liked.length) nodes.push(note('No liked songs yet. Tap the heart under a song to save it.'));
+    if (this.liked.length < this.likedTotal) nodes.push(h('button', { class: 'btn btn-line btn-sm more', type: 'button', onclick: async e => { e.currentTarget.disabled = true; await act(() => this.loadLiked(true)); this.renderLiked(); } }, 'Load more'));
+    this.show(nodes);
+  },
+  renderSearch() {
+    const q = $('#searchInput').value.trim();
+    if (!q) { this.show(note('Search for a song, artist, album or playlist. Choosing a song plays it with the rest of its album.')); return; }
+    this.search(q);
+  },
+  onSearchInput() { clearTimeout(this.searchT); this.searchT = setTimeout(() => this.renderSearch(), 350); },
+  async search(q) {
+    const seq = ++this.seq;
+    try {
+      const j = await Api.get('/search', { q, type: 'track,artist,album,playlist', limit: 6 });
+      if (seq !== this.seq || this.tab !== 'search') return;
+      const items = k => ((j && j[k] && j[k].items) || []).filter(Boolean);
+      const nodes = [];
+      const tracks = items('tracks'), artists = items('artists'), albums = items('albums'), lists = items('playlists');
+      if (tracks.length) nodes.push(h('h4', { class: 'section-title', text: 'Songs' }), tracks.map(t => row({ img: pickImage(t.album && t.album.images, 60), title: t.name, sub: artistNames(t.artists),
+        onPlay: () => t.album && t.album.uri ? Playback.play({ context_uri: t.album.uri, offset: { uri: t.uri } }) : Playback.play({ uris: [t.uri] }), onAdd: () => Playback.queue(t.uri) })));
+      if (artists.length) nodes.push(h('h4', { class: 'section-title', text: 'Artists' }), artists.map(a => row({ img: pickImage(a.images, 60), round: true, title: a.name, sub: 'Artist', placeholder: 'note', onPlay: () => Playback.play({ context_uri: a.uri }) })));
+      if (albums.length) nodes.push(h('h4', { class: 'section-title', text: 'Albums' }), albums.map(a => row({ img: pickImage(a.images, 60), title: a.name, sub: [artistNames(a.artists), (a.release_date || '').slice(0, 4)].filter(Boolean).join(', '), onPlay: () => Playback.play({ context_uri: a.uri }) })));
+      if (lists.length) nodes.push(h('h4', { class: 'section-title', text: 'Playlists' }), lists.map(p => row({ img: pickImage(p.images, 60), title: p.name, sub: p.owner && p.owner.display_name ? `By ${p.owner.display_name}` : 'Playlist', onPlay: () => Playback.play({ context_uri: p.uri }) })));
+      this.show(nodes.length ? nodes : note(`Nothing found for “${q}”.`));
+    } catch (e) { if (seq === this.seq) this.show(note(describeError(e))); }
+  },
+  async renderQueue() {
+    this.show(note('Loading the queue…'));
+    try {
+      const j = await Api.get('/me/player/queue');
+      if (this.tab !== 'queue') return;
+      const cur = j && j.currently_playing, next = ((j && j.queue) || []).filter(Boolean);
+      const sub = t => t.artists ? artistNames(t.artists) : (t.show && t.show.name) || '';
+      const img = t => pickImage((t.album && t.album.images) || t.images || (t.show && t.show.images), 60);
+      if (!cur && !next.length) { this.show(note('The queue is empty. Play something first.')); return; }
+      this.show(
+        cur ? [h('h4', { class: 'section-title', text: 'Now playing' }), row({ img: img(cur), title: cur.name, sub: sub(cur), playing: true })] : null,
+        next.length ? [h('h4', { class: 'section-title', text: 'Next up' }), next.map(t => row({ img: img(t), title: t.name, sub: sub(t) }))] : null
+      );
+    } catch (e) { if (this.tab === 'queue') this.show(note(describeError(e))); }
+  }
+};
+
+/* =================================================================
+   Settings
+================================================================= */
+let deferredInstall = null;
+const SettingsUI = {
+  open() { this.fill(); $('#settings').showModal(); this.loadPlaylistOptions(); },
+  close() { $('#settings').close(); },
+  fill() {
+    $$('#settings .num').forEach(el => { el.querySelector('input').value = S[el.dataset.key]; });
+    $$('#settings .switch[data-key]').forEach(el => { el.checked = !!S[el.dataset.key]; });
+    $$('#settings input[name="breakMusic"]').forEach(el => { el.checked = el.value === S.breakMusic; });
+    setRange($('#breakVolume'), S.breakVolume, 90); this.breakVolText();
+    setRange($('#chimeVolume'), S.chimeVolume, 100);
+    this.syncBreakFields(); this.syncPresets(); this.renderAccount(); this.notifyNote();
+    $('#installField').hidden = !deferredInstall;
+  },
+  breakVolText() { $('#breakVolumeText').textContent = `${S.breakVolume}% of your normal volume`; },
+  syncBreakFields() { $('#breakPlaylistField').hidden = S.breakMusic !== 'switch'; $('#breakVolumeField').hidden = S.breakMusic !== 'duck'; },
+  syncPresets() { $$('#presets .preset').forEach(b => { const [f, s, l, r] = b.dataset.preset.split(',').map(Number); b.setAttribute('aria-pressed', String(S.focusMin === f && S.shortMin === s && S.longMin === l && S.rounds === r)); }); },
+  notifyNote() {
+    const n = $('#notifyNote');
+    if (!Notify.supported) n.textContent = 'This browser doesn’t support notifications.';
+    else if (Notification.permission === 'denied') n.textContent = 'Notifications are blocked for Tide. Allow them in your browser’s site settings.';
+    else n.textContent = 'Shows a notification when a session ends';
+  },
+  renderAccount() {
+    if (!$('#accountText')) return;
+    const p = Me.profile;
+    $('#accountText').textContent = Auth.signedIn ? `Connected${p && p.display_name ? ` as ${p.display_name}` : ''}` : 'Not connected';
+    $('#accountNote').textContent = Auth.signedIn ? (Sdk.ready ? 'Music can play in this window' : Sdk.failed ? 'The in-window player isn’t available' : 'Starting the player') : 'Connect to play music with your sessions';
+    $('#accountBtn').textContent = Auth.signedIn ? 'Disconnect' : 'Connect';
+  },
+  async loadPlaylistOptions() {
+    const fill = (sel, current, emptyText, list) => {
+      sel.textContent = '';
+      sel.append(h('option', { value: '', text: emptyText }));
+      const seen = new Set();
+      if (list) for (const p of list) { seen.add(p.uri); sel.append(h('option', { value: p.uri, text: p.name || 'Untitled playlist' })); }
+      if (current && !seen.has(current.uri)) sel.append(h('option', { value: current.uri, text: current.name }));
+      sel.value = current ? current.uri : '';
+    };
+    const fp = $('#focusPlaylist'), bp = $('#breakPlaylist');
+    if (!Auth.signedIn) { fill(fp, null, 'Connect Spotify first'); fill(bp, null, 'Connect Spotify first'); fp.disabled = bp.disabled = true; return; }
+    fp.disabled = bp.disabled = false;
+    fill(fp, S.focusPlaylist, 'None, keep what was playing', Library.playlists);
+    fill(bp, S.breakPlaylist, 'Choose a playlist', Library.playlists);
+    if (!Library.playlists) {
+      try { const list = await Library.loadPlaylists(); fill(fp, S.focusPlaylist, 'None, keep what was playing', list); fill(bp, S.breakPlaylist, 'Choose a playlist', list); }
+      catch (e) { Errors.report(e, true); }
+    }
+  },
+  applyDuration(key, oldVal) {
+    const phase = key.replace('Min', '');
+    if (T.phase === phase && T.status === 'idle' && T.remainingMs === T.durationMs && T.durationMs === oldVal * 60000) {
+      T.durationMs = T.remainingMs = phaseMs(phase); saveTimer();
+    }
+    render(true);
+  },
+  setNum(key, v) {
+    const el = $(`#settings .num[data-key="${key}"]`);
+    const val = clamp(Math.round(Number(v) || S[key]), Number(el.dataset.min), Number(el.dataset.max));
+    const old = S[key];
+    S[key] = val; saveSettings();
+    el.querySelector('input').value = val;
+    if (key.endsWith('Min')) this.applyDuration(key, old); else render(true);
+    this.syncPresets();
+  },
+  bind() {
+    $('#settingsDone').addEventListener('click', () => this.close());
+    $('#settings').addEventListener('click', e => { if (e.target === $('#settings')) this.close(); });
+    $$('#settings .num').forEach(el => {
+      const key = el.dataset.key, input = el.querySelector('input');
+      el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => this.setNum(key, S[key] + Number(b.dataset.step))));
+      input.addEventListener('change', () => this.setNum(key, input.value));
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); this.setNum(key, input.value); } });
+    });
+    $$('#presets .preset').forEach(b => b.addEventListener('click', () => {
+      const [f, s, l, r] = b.dataset.preset.split(',').map(Number);
+      const old = { focusMin: S.focusMin, shortMin: S.shortMin, longMin: S.longMin };
+      Object.assign(S, { focusMin: f, shortMin: s, longMin: l, rounds: r }); saveSettings();
+      this.fill();
+      ['focusMin', 'shortMin', 'longMin'].forEach(k => this.applyDuration(k, old[k]));
+    }));
+    $$('#settings .switch[data-key]').forEach(el => el.addEventListener('change', async () => {
+      const key = el.dataset.key;
+      if (key === 'notify' && el.checked) {
+        const ok = await Notify.enable();
+        if (!ok) { el.checked = false; this.notifyNote(); toast('Tide isn’t allowed to show notifications. Allow them in your browser’s site settings.'); return; }
+      }
+      S[key] = el.checked; saveSettings();
+      if (key === 'albumTint') { Rooms.apply(T.phase); Favicon.draw(); }
+      if (key === 'showSeconds') render(true);
+      if (key === 'wakeLock') WakeLock.sync();
+      this.notifyNote();
+    }));
+    $$('#settings input[name="breakMusic"]').forEach(el => el.addEventListener('change', () => { if (el.checked) { S.breakMusic = el.value; saveSettings(); this.syncBreakFields(); } }));
+    $('#breakVolume').addEventListener('input', e => { S.breakVolume = Number(e.target.value); saveSettings(); setRange(e.target, S.breakVolume, 90); this.breakVolText(); });
+    $('#chimeVolume').addEventListener('input', e => { S.chimeVolume = Number(e.target.value); saveSettings(); setRange(e.target, S.chimeVolume, 100); });
+    $('#chimeVolume').addEventListener('change', () => { Sound.chime('short'); });
+    const pick = sel => { const o = sel.selectedOptions[0]; return sel.value ? { uri: sel.value, name: o ? o.textContent : 'Playlist' } : null; };
+    $('#focusPlaylist').addEventListener('change', e => { S.focusPlaylist = pick(e.target); saveSettings(); });
+    $('#breakPlaylist').addEventListener('change', e => { S.breakPlaylist = pick(e.target); saveSettings(); });
+    $('#testChime').addEventListener('click', () => { Sound.unlock(); const was = S.chime; S.chime = true; Sound.chime('short'); S.chime = was; });
+    $('#accountBtn').addEventListener('click', () => {
+      if (Auth.signedIn) { Auth.signOut(false); toast('Spotify is disconnected.'); this.loadPlaylistOptions(); }
+      else { this.close(); Setup.show(); }
+    });
+    $('#installBtn').addEventListener('click', async () => {
+      if (!deferredInstall) return;
+      deferredInstall.prompt();
+      try { await deferredInstall.userChoice; } catch {}
+      deferredInstall = null; $('#installField').hidden = true;
+    });
+  }
+};
+
+/* =================================================================
+   First-run setup
+================================================================= */
+const Setup = {
+  show() {
+    $('#redirectUri').textContent = Auth.redirectUri;
+    $('#clientIdInput').value = Auth.clientId || '';
+    $('#clientIdError').hidden = true;
+    $('#setup').hidden = false;
+    document.body.classList.add('setup-open');
+    Library.close();
+    if ($('#settings').open) $('#settings').close();
+    Rooms.setProgress(.22);
+  },
+  hide() { $('#setup').hidden = true; document.body.classList.remove('setup-open'); render(true); },
+  async connect(e) {
+    e.preventDefault();
+    const v = $('#clientIdInput').value.trim();
+    const err = $('#clientIdError');
+    if (!/^[0-9a-f]{32}$/i.test(v)) {
+      err.textContent = 'That doesn’t look like a Client ID. It’s a 32-character code of letters and numbers on your app’s page in the Spotify dashboard.';
+      err.hidden = false; $('#clientIdInput').focus(); return;
+    }
+    err.hidden = true;
+    if (v !== Auth.clientId) { Auth.tokens = null; store.del('tide.tokens'); }
+    Auth.clientId = v;
+    try { await Auth.login(); } catch { err.textContent = 'Tide couldn’t start the Spotify sign-in. Reload the page and try again.'; err.hidden = false; }
+  },
+  bind() {
+    $('#connectForm').addEventListener('submit', e => this.connect(e));
+    $('#skipSetup').addEventListener('click', () => { store.set('tide.setupSkipped', true); this.hide(); });
+    $$('[data-copy]').forEach(b => b.addEventListener('click', async () => {
+      const text = $(b.dataset.copy).textContent;
+      try { await navigator.clipboard.writeText(text); b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy'; }, 1800); }
+      catch { const r = document.createRange(); r.selectNodeContents($(b.dataset.copy)); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Press Ctrl+C to copy it.'); }
+    }));
+  }
+};
+
+/* =================================================================
+   One window at a time
+================================================================= */
+const Instance = {
+  id: randomString(10), ch: null, yielded: false,
+  init() {
+    if (!('BroadcastChannel' in window)) return;
+    this.ch = new BroadcastChannel('tide');
+    this.ch.onmessage = e => { if (e.data && e.data.type === 'takeover' && e.data.id !== this.id) this.yieldTo(); };
+    this.ch.postMessage({ type: 'takeover', id: this.id });
+  },
+  yieldTo() {
+    if (this.yielded) return;
+    this.yielded = true;
+    Sdk.disconnect(); Playback.stopPoll(); WakeLock.sync();
+    $('#blocker').hidden = false;
+  }
+};
+
+/* =================================================================
+   Wiring
+================================================================= */
+function bindUi() {
+  $('#startBtn').addEventListener('click', () => Timer.toggle());
+  $('#resetBtn').addEventListener('click', () => Timer.reset());
+  $('#skipBtn').addEventListener('click', () => Timer.complete({ skipped: true }));
+  $('#plusBtn').addEventListener('click', () => Timer.addMinute());
+  $$('.phase-tab').forEach(b => b.addEventListener('click', () => Timer.setPhase(b.dataset.phase)));
+  const intent = $('#intent');
+  intent.value = T.intent || '';
+  intent.addEventListener('input', () => { T.intent = intent.value; saveTimer(); });
+  intent.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') intent.blur(); });
+
+  $('#libraryBtn').addEventListener('click', () => Library.toggle());
+  $('#settingsBtn').addEventListener('click', () => SettingsUI.open());
+  $('#connectBtn').addEventListener('click', () => Setup.show());
+  $('#chooseBtn').addEventListener('click', () => Library.open('playlists'));
+  $('#drawerClose').addEventListener('click', () => Library.close());
+  $$('#drawer .tab').forEach(b => b.addEventListener('click', () => Library.select(b.dataset.tab)));
+  $('#searchInput').addEventListener('input', () => Library.onSearchInput());
+
+  $('#playBtn').addEventListener('click', () => act(() => Playback.toggle()));
+  $('#nextBtn').addEventListener('click', () => act(() => Playback.next()));
+  $('#prevBtn').addEventListener('click', () => act(() => Playback.prev()));
+  $('#shuffleBtn').addEventListener('click', () => act(() => Playback.toggleShuffle()));
+  $('#repeatBtn').addEventListener('click', () => act(() => Playback.cycleRepeat()));
+  $('#likeBtn').addEventListener('click', () => Like.toggle());
+  $('#deviceBtn').addEventListener('click', e => { e.stopPropagation(); DeviceMenu.toggle(); });
+
+  const seek = $('#seek');
+  seek.addEventListener('input', () => {
+    MusicUI.seeking = true;
+    const dur = (Playback.np && Playback.np.durationMs) || 0;
+    setRange(seek, Number(seek.value), 1000);
+    $('#tPos').textContent = fmtTime(dur * seek.value / 1000);
+  });
+  seek.addEventListener('change', () => {
+    const dur = (Playback.np && Playback.np.durationMs) || 0;
+    MusicUI.seeking = false;
+    act(() => Playback.seek(dur * seek.value / 1000));
+  });
+  const vol = $('#volume');
+  let lastVol = S.volume || 70;
+  vol.addEventListener('input', () => { setRange(vol, Number(vol.value), 100); setIcon($('#muteBtn .ic'), Number(vol.value) === 0 ? 'mute' : 'volume'); Playback.setVolume(Number(vol.value)); });
+  $('#muteBtn').addEventListener('click', () => {
+    const cur = Playback.currentVolume();
+    if (cur > 0) { lastVol = cur; Playback.setVolume(0); } else Playback.setVolume(lastVol || 60);
+    MusicUI.render();
+  });
+
+  $('#takeBack').addEventListener('click', () => location.reload());
+
+  document.addEventListener('pointerdown', () => { Sound.unlock(); Sdk.gesture(); }, true);
+  document.addEventListener('keydown', () => { Sound.unlock(); Sdk.gesture(); }, true);
+  document.addEventListener('click', e => {
+    if (DeviceMenu.isOpen && !e.target.closest('#deviceMenu')) DeviceMenu.close();
+    const b = e.target.closest('button');
+    if (b && e.detail > 0 && !b.closest('dialog') && !b.closest('form')) setTimeout(() => { if (document.activeElement === b) b.blur(); }, 0);
+  });
+  addEventListener('resize', () => { if (DeviceMenu.isOpen) DeviceMenu.place(); });
+
+  document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === 'Escape') { if (DeviceMenu.isOpen) DeviceMenu.close(); else if (Library.isOpen && !$('#settings').open) Library.close(); return; }
+    const t = e.target;
+    if ($('#settings').open || !$('#setup').hidden || !$('#blocker').hidden) return;
+    if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (e.key === ' ' && t && t.closest && t.closest('button, a')) return;
+    switch (e.key) {
+      case ' ': e.preventDefault(); Timer.toggle(); break;
+      case 's': case 'S': Timer.complete({ skipped: true }); break;
+      case 'r': case 'R': Timer.reset(); break;
+      case 'm': case 'M': if (Auth.signedIn) act(() => Playback.toggle()); break;
+      case 'ArrowRight': if (Playback.np) { e.preventDefault(); act(() => Playback.next()); } break;
+      case 'ArrowLeft': if (Playback.np) { e.preventDefault(); act(() => Playback.prev()); } break;
+      case 'l': case 'L': Library.toggle(); break;
+      case ',': SettingsUI.open(); break;
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    WakeLock.sync();
+    if (!document.hidden && Auth.signedIn && !Playback.localActive) Playback.poll(300);
+  });
+  addEventListener('storage', e => { if (e.key === 'tide.settings' && e.newValue) { try { Object.assign(S, JSON.parse(e.newValue)); render(true); } catch {} } });
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; if ($('#settings').open) $('#installField').hidden = false; });
+  addEventListener('appinstalled', () => { deferredInstall = null; toast('Tide is installed. Open it from your Start menu or taskbar.'); });
+
+  SettingsUI.bind();
+  Setup.bind();
+}
+
+function startSpotify() {
+  MusicUI.render();
+  Me.load();
+  Sdk.load();
+  Playback.refresh();
+}
+
+async function boot() {
+  paintIcons();
+  Clock.el = $('#clock');
+  T.lastTick = Date.now();
+  if (T.status === 'running' && Date.now() >= T.endAt) Timer.complete({ silent: true });
+  document.body.dataset.phase = T.phase;
+  document.body.dataset.status = T.status;
+  Rooms.init(T.phase);
+  render(true);
+  bindUi();
+  Instance.init();
+  startTicker();
+  WakeLock.sync();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+  await Auth.handleRedirect();
+  if (Auth.signedIn) startSpotify();
+  else if (!store.get('tide.setupSkipped', false)) Setup.show();
+  MusicUI.render();
+  SettingsUI.renderAccount();
+}
+
+window.Tide = { T, S, Timer, Playback, Sdk, Auth, Api, Library, Link, Rooms, palette, get held() { return held; } };
+boot();
+})();
+</script>
+</body>
+</html>
